@@ -21,7 +21,7 @@ function Register() {
       <div className="mt-6"><RoleTabs value={role} onChange={setRole} /></div>
       <form className="mt-8 space-y-5" onSubmit={(e) => e.preventDefault()}>
         <NotOpenNotice />
-        {fields.map(([label, type, ac]) => {
+        {fields.map(([label = "", type, ac]) => {
           const id = `r-${label.toLowerCase().replace(/\s/g, "-")}`;
           return (
             <div key={id}>

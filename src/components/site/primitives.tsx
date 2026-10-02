@@ -21,7 +21,7 @@ export function Reveal({ children, delay = 0, className }: { children: ReactNode
   );
 }
 
-export function Eyebrow({ index, children, className }: { index?: string; children: ReactNode; className?: string }) {
+export function Eyebrow({ index, children, className }: { index?: string | undefined; children: ReactNode; className?: string | undefined }) {
   return (
     <p className={cn("eyebrow flex items-center gap-3 text-muted-foreground", className)}>
       {index && <span className="text-signal">{index}</span>}
