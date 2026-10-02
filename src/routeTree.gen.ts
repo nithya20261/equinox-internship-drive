@@ -19,6 +19,9 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as CompaniesIndexRouteImport } from './routes/companies.index'
 import { Route as CompaniesIdRouteImport } from './routes/companies.$id'
+import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
+import { Route as DashboardCompanyRouteImport } from './routes/dashboard.company'
+import { Route as DashboardStudentRouteImport } from './routes/dashboard.student'
 import { Route as InternshipsIndexRouteImport } from './routes/internships.index'
 import { Route as InternshipsIdRouteImport } from './routes/internships.$id'
 
@@ -72,6 +75,21 @@ const CompaniesIdRoute = CompaniesIdRouteImport.update({
   path: '/companies/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardAdminRoute = DashboardAdminRouteImport.update({
+  id: '/dashboard/admin',
+  path: '/dashboard/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardCompanyRoute = DashboardCompanyRouteImport.update({
+  id: '/dashboard/company',
+  path: '/dashboard/company',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardStudentRoute = DashboardStudentRouteImport.update({
+  id: '/dashboard/student',
+  path: '/dashboard/student',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InternshipsIndexRoute = InternshipsIndexRouteImport.update({
   id: '/internships/',
   path: '/internships/',
@@ -93,6 +111,9 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/schedule': typeof ScheduleRoute
   '/companies/$id': typeof CompaniesIdRoute
+  '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/company': typeof DashboardCompanyRoute
+  '/dashboard/student': typeof DashboardStudentRoute
   '/internships/$id': typeof InternshipsIdRoute
   '/companies/': typeof CompaniesIndexRoute
   '/internships/': typeof InternshipsIndexRoute
@@ -107,6 +128,9 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/schedule': typeof ScheduleRoute
   '/companies/$id': typeof CompaniesIdRoute
+  '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/company': typeof DashboardCompanyRoute
+  '/dashboard/student': typeof DashboardStudentRoute
   '/internships/$id': typeof InternshipsIdRoute
   '/companies': typeof CompaniesIndexRoute
   '/internships': typeof InternshipsIndexRoute
@@ -122,6 +146,9 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/schedule': typeof ScheduleRoute
   '/companies/$id': typeof CompaniesIdRoute
+  '/dashboard/admin': typeof DashboardAdminRoute
+  '/dashboard/company': typeof DashboardCompanyRoute
+  '/dashboard/student': typeof DashboardStudentRoute
   '/internships/$id': typeof InternshipsIdRoute
   '/companies/': typeof CompaniesIndexRoute
   '/internships/': typeof InternshipsIndexRoute
@@ -138,6 +165,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/schedule'
     | '/companies/$id'
+    | '/dashboard/admin'
+    | '/dashboard/company'
+    | '/dashboard/student'
     | '/internships/$id'
     | '/companies/'
     | '/internships/'
@@ -152,6 +182,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/schedule'
     | '/companies/$id'
+    | '/dashboard/admin'
+    | '/dashboard/company'
+    | '/dashboard/student'
     | '/internships/$id'
     | '/companies'
     | '/internships'
@@ -166,6 +199,9 @@ export interface FileRouteTypes {
     | '/register'
     | '/schedule'
     | '/companies/$id'
+    | '/dashboard/admin'
+    | '/dashboard/company'
+    | '/dashboard/student'
     | '/internships/$id'
     | '/companies/'
     | '/internships/'
@@ -181,6 +217,9 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   ScheduleRoute: typeof ScheduleRoute
   CompaniesIdRoute: typeof CompaniesIdRoute
+  DashboardAdminRoute: typeof DashboardAdminRoute
+  DashboardCompanyRoute: typeof DashboardCompanyRoute
+  DashboardStudentRoute: typeof DashboardStudentRoute
   InternshipsIdRoute: typeof InternshipsIdRoute
   CompaniesIndexRoute: typeof CompaniesIndexRoute
   InternshipsIndexRoute: typeof InternshipsIndexRoute
@@ -258,6 +297,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CompaniesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/admin': {
+      id: '/dashboard/admin'
+      path: '/dashboard/admin'
+      fullPath: '/dashboard/admin'
+      preLoaderRoute: typeof DashboardAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/company': {
+      id: '/dashboard/company'
+      path: '/dashboard/company'
+      fullPath: '/dashboard/company'
+      preLoaderRoute: typeof DashboardCompanyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/student': {
+      id: '/dashboard/student'
+      path: '/dashboard/student'
+      fullPath: '/dashboard/student'
+      preLoaderRoute: typeof DashboardStudentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/internships/': {
       id: '/internships/'
       path: '/internships'
@@ -285,6 +345,9 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   ScheduleRoute: ScheduleRoute,
   CompaniesIdRoute: CompaniesIdRoute,
+  DashboardAdminRoute: DashboardAdminRoute,
+  DashboardCompanyRoute: DashboardCompanyRoute,
+  DashboardStudentRoute: DashboardStudentRoute,
   InternshipsIdRoute: InternshipsIdRoute,
   CompaniesIndexRoute: CompaniesIndexRoute,
   InternshipsIndexRoute: InternshipsIndexRoute,
