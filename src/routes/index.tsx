@@ -59,23 +59,7 @@ function Hero() {
         <h1 className="display mt-8 text-[17vw] md:text-[13.5vw] xl:text-[12.5rem]">
           <span className="block overflow-hidden"><motion.span className="block" {...line(0.05)}>Internship</motion.span></span>
           <span className="block overflow-hidden">
-            <motion.span className="flex items-center gap-[0.15em]" {...line(0.15)}>
-              Drive
-              <span className="relative inline-flex h-[0.62em] flex-1 items-center" aria-hidden>
-                <motion.span
-                  className="h-[0.06em] w-full origin-left bg-foreground"
-                  initial={reduce ? false : { scaleX: 0 }}
-                  animate={{ scaleX: 1 }}
-                  transition={{ duration: 1.1, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                />
-                <motion.span
-                  className="absolute right-0 h-[0.62em] w-[0.62em] rounded-full bg-signal"
-                  initial={reduce ? false : { scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.6, delay: 1.2, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </span>
-            </motion.span>
+            <motion.span className="block" {...line(0.15)}>Drive</motion.span>
           </span>
         </h1>
 
