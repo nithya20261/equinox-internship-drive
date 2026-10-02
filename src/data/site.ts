@@ -36,11 +36,11 @@ export const JOURNEY = [
   { step: "Track Application", note: "Follow each application's status from your dashboard." },
 ] as const;
 
-export const BENEFITS = [
-  { title: "Explore career opportunities", body: "See what startups and companies are hiring interns for — across domains, in one place." },
-  { title: "Gain practical experience", body: "Internships put classroom learning to work on real products and real problems." },
-  { title: "Build professional connections", body: "Meet founders, recruiters and teams in person over two days on campus." },
-  { title: "Develop useful skills", body: "Learn how industry teams work, and what they look for in early-career talent." },
+export const DRIVE_STATS = [
+  { value: "2000+", label: "Students on campus", body: "Expected across the two-day summit, across domains." },
+  { value: "15+", label: "Startups hiring", body: "Organisations recruiting interns face to face — not through a portal." },
+  { value: "700+", label: "At the previous edition", body: "The turnout that set this format." },
+  { value: "Est. 2015", label: "Organised by CIE", body: "Centre for Innovation & Entrepreneurship at MLRIT." },
 ] as const;
 
 export const FAQS = [

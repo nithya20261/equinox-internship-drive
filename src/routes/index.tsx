@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
-import { BENEFITS, EVENT } from "@/data/site";
+import { DRIVE_STATS, EVENT } from "@/data/site";
 import { Container, Eyebrow, Reveal, SectionHead, TbaBadge } from "@/components/site/primitives";
 import { CtaPair, FaqList, Journey, ListingAnatomy, OpportunitySlot } from "@/components/site/blocks";
 
