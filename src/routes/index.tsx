@@ -138,9 +138,8 @@ function WhatIs() {
           <div className="md:col-span-9">
             <Reveal>
               <p className="headline text-3xl md:text-5xl">
-                The Internship Drive connects students with{" "}
-                <span className="text-signal">startups and companies</span> offering internship
-                opportunities — inside a summit built around entrepreneurship and real-world problems.
+                Students meet <span className="text-signal">startups</span> hiring for real
+                internships — at one summit.
               </p>
             </Reveal>
             <div className="mt-14 grid gap-8 border-t border-border pt-8 md:grid-cols-2">
