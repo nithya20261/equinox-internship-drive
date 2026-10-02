@@ -5,8 +5,9 @@ export type DashSection = { key: string; label: string; empty: string };
 
 /** Shared shell for student / company / admin dashboards. Sections render empty states until wired to data. */
 export function DashboardShell({ role, sections }: { role: string; sections: DashSection[] }) {
-  const [active, setActive] = useState(sections[0].key);
-  const current = sections.find((s) => s.key === active)!;
+  const [active, setActive] = useState(sections[0]?.key ?? "");
+  const current = sections.find((s) => s.key === active) ?? sections[0];
+  if (!current) return null;
   return (
     <Container className="py-10">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-foreground pb-6">
