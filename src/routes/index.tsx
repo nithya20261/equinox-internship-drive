@@ -53,7 +53,6 @@ function Hero() {
             <span className="pulse-dot h-2 w-2 rounded-full bg-signal" aria-hidden />
             {EVENT.name}
           </p>
-          <p className="eyebrow text-muted-foreground">Sub-event · Industry Connect</p>
         </div>
 
         <h1 className="display mt-8 text-[17vw] md:text-[13.5vw] xl:text-[12.5rem]">
