@@ -91,7 +91,7 @@
   --ink-muted: #B5B2B8;
   --ink-border: oklch(1 0 0 / 12%);
   --signal: #7484FE;
-  --signal-foreground: #FFFFFF;
+  --signal-foreground: #2A2A2A;
   --chart-1: #7484FE;
   --chart-2: #2A2A2A;
   --chart-3: oklch(0.47 0.015 260);
@@ -100,7 +100,7 @@
   --sidebar: #2A2A2A;
   --sidebar-foreground: #F7F2F6;
   --sidebar-primary: #7484FE;
-  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-primary-foreground: #2A2A2A;
   --sidebar-accent: oklch(1 0 0 / 7%);
   --sidebar-accent-foreground: #F7F2F6;
   --sidebar-border: oklch(1 0 0 / 12%);
