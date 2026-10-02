@@ -149,18 +149,24 @@ function Why() {
     <section className="bg-ink py-24 text-ink-foreground md:py-32">
       <Container>
         <div className="grid gap-6 border-t border-ink-foreground pt-6 md:grid-cols-12">
-          <div className="md:col-span-3"><Eyebrow index="02" className="text-ink-muted">Why participate</Eyebrow></div>
-          <h2 className="headline text-4xl md:col-span-9 md:text-6xl">Four reasons to show up on 30 October.</h2>
+          <div className="md:col-span-3"><Eyebrow index="02" className="text-ink-muted">On the record</Eyebrow></div>
+          <h2 className="headline text-4xl md:col-span-9 md:text-6xl">One campus. Two days. Real hiring.</h2>
         </div>
-        <ul className="mt-16">
-          {BENEFITS.map((b, i) => (
-            <li key={b.title} className="group grid gap-4 border-t border-ink-border py-8 md:grid-cols-12 md:items-baseline">
-              <span className="eyebrow text-signal md:col-span-3">{String(i + 1).padStart(2, "0")} / 04</span>
-              <h3 className="display text-4xl transition-transform duration-500 group-hover:translate-x-2 md:col-span-5 md:text-6xl">{b.title}</h3>
-              <p className="text-ink-muted md:col-span-4">{b.body}</p>
-            </li>
+        <div className="mt-16 grid border border-ink-border sm:grid-cols-2 lg:grid-cols-4">
+          {DRIVE_STATS.map((s) => (
+            <div key={s.label} className="group flex flex-col gap-16 border-ink-border p-6 max-sm:border-b max-sm:last:border-b-0 sm:border-r sm:odd:border-r sm:last:border-r-0 lg:border-r lg:last:border-r-0">
+              <p className="display text-5xl text-signal md:text-6xl">{s.value}</p>
+              <div>
+                <p className="eyebrow text-ink-foreground">{s.label}</p>
+                <p className="mt-2 text-sm text-ink-muted">{s.body}</p>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
+        <p className="mt-10 max-w-2xl text-ink-muted">
+          The Internship Drive sits inside Equinox E-Summit 2K26 — recruiters and founders meet candidates face to
+          face, on campus, over two days.
+        </p>
       </Container>
     </section>
   );
