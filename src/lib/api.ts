@@ -352,6 +352,7 @@ export async function getOpportunities(): Promise<Opportunity[]> {
     .select(
       "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at"
     )
+    .eq("status", "open")
     .order("created_at", { ascending: false });
 
   if (error) {
