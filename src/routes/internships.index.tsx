@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowRight, Lock, Loader2 } from "lucide-react";
 import { pageMeta } from "@/lib/seo";
 import { Container, EmptyState, PageHero } from "@/components/site/primitives";
 import { FilterBar } from "@/components/site/Filters";
 import { OpportunitySlot } from "@/components/site/blocks";
 import { useAuth } from "@/lib/auth";
+import { getOpportunities, type Opportunity } from "@/lib/api";
 
 export const Route = createFileRoute("/internships/")({
   head: () =>
@@ -17,6 +19,38 @@ export const Route = createFileRoute("/internships/")({
 
 function Internships() {
   const { isLoggedIn } = useAuth();
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    getOpportunities()
+      .then((data) => {
+        if (mounted) {
+          setOpportunities(data);
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load opportunities:", err);
+        if (mounted) setIsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filtered = opportunities.filter((op) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      op.role.toLowerCase().includes(q) ||
+      op.domain.toLowerCase().includes(q) ||
+      op.location.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <>
@@ -65,27 +99,46 @@ function Internships() {
         <FilterBar
           placeholder="Search roles, skills or domains"
           filters={["Domain", "Internship type", "Location", "Skills"]}
+          onSearchChange={setSearchQuery}
         />
 
         <div className="mt-6 flex items-center justify-between border-b border-[#2A2A2A] pb-3">
-          <p className="eyebrow text-[#F7F2F6]">0 listings</p>
+          <p className="eyebrow text-[#F7F2F6]">{filtered.length} listings</p>
           <p className="eyebrow text-[#7484FE]">Sorted by · newest</p>
         </div>
 
-        <div className="mt-10">
-          <EmptyState
-            title="Internship opportunities are being finalised."
-            body="Participating companies and roles will appear here soon. Register or log in to be ready when applications open."
-            action={
-              !isLoggedIn ? (
-                <Link to="/register" className="btn btn-ink">
-                  Register <ArrowRight size={16} />
-                </Link>
-              ) : undefined
-            }
-          />
-        </div>
+        {isLoading ? (
+          <div className="my-12 flex items-center justify-center py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-signal" />
+          </div>
+        ) : filtered.length > 0 ? (
+          <div className="mt-8 border-t border-foreground">
+            {filtered.map((item, idx) => (
+              <OpportunitySlot
+                key={item.id}
+                n={idx + 1}
+                item={item}
+                isLoggedIn={isLoggedIn}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-10">
+            <EmptyState
+              title="Internship opportunities are being finalised."
+              body="Participating companies and roles will appear here soon. Register or log in to be ready when applications open."
+              action={
+                !isLoggedIn ? (
+                  <Link to="/register" className="btn btn-ink">
+                    Register <ArrowRight size={16} />
+                  </Link>
+                ) : undefined
+              }
+            />
+          </div>
+        )}
 
+        {/* Preview and structural exploration */}
         <div className="mt-16">
           <div className="flex items-center justify-between">
             <p className="eyebrow mb-4 text-muted-foreground">Listing preview — structure only</p>
@@ -98,7 +151,7 @@ function Internships() {
 
           <div className="border-t border-foreground opacity-70">
             {[1, 2].map((n) => (
-              <OpportunitySlot key={n} n={n} />
+              <OpportunitySlot key={n} n={n} isLoggedIn={isLoggedIn} />
             ))}
           </div>
 

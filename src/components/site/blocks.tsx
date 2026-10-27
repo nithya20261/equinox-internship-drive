@@ -35,15 +35,30 @@ export function Journey() {
   );
 }
 
-/** Structural preview of an internship listing with anonymous company shield. */
-export function OpportunitySlot({ n }: { n: number }) {
+import type { Opportunity } from "@/lib/api";
+
+/** Structural preview or real internship listing with anonymous company shield. */
+export function OpportunitySlot({
+  n = 1,
+  item,
+  isLoggedIn = false,
+}: {
+  n?: number;
+  item?: Opportunity;
+  isLoggedIn?: boolean;
+}) {
   const roles = [
     { title: "AI Systems & Infrastructure Intern", domain: "Artificial Intelligence", mode: "On-Campus" },
     { title: "Full-Stack Web3 / Cloud Intern", domain: "Cloud & Distributed Systems", mode: "On-Campus" },
     { title: "Embedded & Edge Computing Intern", domain: "IoT & Hardware", mode: "On-Campus" },
   ];
-  const defaultRole = { title: "AI Systems & Infrastructure Intern", domain: "Artificial Intelligence", mode: "On-Campus" };
-  const role = roles[(n - 1) % roles.length] ?? defaultRole;
+  const defaultRole = roles[(n - 1) % roles.length] ?? roles[0]!;
+
+  const title = item?.role || defaultRole.title;
+  const domain = item?.domain || defaultRole.domain;
+  const location = item?.location || "MLRIT";
+  const mode = item?.mode || defaultRole.mode;
+  const detailId = item?.id || "preview";
 
   return (
     <article className="group grid gap-4 border-b border-[#2A2A2A] py-6 transition-colors hover:bg-[#0A0A0A] md:grid-cols-12 md:items-center md:px-4">
@@ -57,30 +72,46 @@ export function OpportunitySlot({ n }: { n: number }) {
             <span className="uppercase tracking-wider">Company Identity Shielded</span>
           </div>
           <h3 className="headline mt-1 text-xl sm:text-2xl text-[#F7F2F6]">
-            {role.title}
+            {title}
           </h3>
         </div>
       </div>
 
-      <dl className="grid grid-cols-3 gap-3 text-xs md:col-span-5">
+      <dl className="grid grid-cols-3 gap-3 text-xs md:col-span-4">
         <div>
           <dt className="eyebrow text-[0.6rem] text-[#F7F2F6]/50">Domain</dt>
-          <dd className="mt-0.5 text-[#F7F2F6] font-mono text-xs">{role.domain}</dd>
+          <dd className="mt-0.5 text-[#F7F2F6] font-mono text-xs truncate">{domain}</dd>
         </div>
         <div>
           <dt className="eyebrow text-[0.6rem] text-[#F7F2F6]/50">Location</dt>
-          <dd className="mt-0.5 text-[#F7F2F6] font-mono text-xs">MLRIT</dd>
+          <dd className="mt-0.5 text-[#F7F2F6] font-mono text-xs truncate">{location}</dd>
         </div>
         <div>
           <dt className="eyebrow text-[0.6rem] text-[#F7F2F6]/50">Mode</dt>
-          <dd className="mt-0.5 text-[#33FF67] font-mono text-xs">{role.mode}</dd>
+          <dd className="mt-0.5 text-[#33FF67] font-mono text-xs">{mode}</dd>
         </div>
       </dl>
 
-      <div className="flex items-center justify-between gap-3 md:col-span-2 md:justify-end">
+      <div className="flex items-center justify-between gap-3 md:col-span-3 md:justify-end">
         <span className="inline-flex items-center gap-1 border border-[#2A2A2A] bg-black px-2.5 py-1 font-mono text-[10px] text-[#7484FE]">
           <Lock className="h-2.5 w-2.5" /> Confidential
         </span>
+        {isLoggedIn ? (
+          <Link
+            to="/internships/$id"
+            params={{ id: detailId }}
+            className="btn btn-signal h-8 px-3 text-xs"
+          >
+            View Role <ArrowRight size={12} className="ml-1" />
+          </Link>
+        ) : (
+          <Link
+            to="/login"
+            className="btn btn-line h-8 px-3 text-xs"
+          >
+            Login <Lock size={12} className="ml-1" />
+          </Link>
+        )}
       </div>
     </article>
   );

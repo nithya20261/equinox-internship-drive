@@ -1,13 +1,26 @@
 import { Search } from "lucide-react";
 
 /** Search + filter bar. Options load from the backend later; disabled until data exists. */
-export function FilterBar({ placeholder, filters }: { placeholder: string; filters: string[] }) {
+export function FilterBar({
+  placeholder,
+  filters,
+  onSearchChange,
+}: {
+  placeholder: string;
+  filters: string[];
+  onSearchChange?: (val: string) => void;
+}) {
   return (
     <form role="search" onSubmit={(e) => e.preventDefault()} className="border border-foreground bg-card">
       <div className="flex items-center gap-3 border-b border-border px-4">
         <Search size={18} className="text-muted-foreground" aria-hidden />
         <label htmlFor="q" className="sr-only">{placeholder}</label>
-        <input id="q" placeholder={placeholder} className="h-14 flex-1 bg-transparent text-lg outline-none placeholder:text-muted-foreground" />
+        <input
+          id="q"
+          placeholder={placeholder}
+          onChange={(e) => onSearchChange?.(e.target.value)}
+          className="h-14 flex-1 bg-transparent text-lg outline-none placeholder:text-muted-foreground"
+        />
       </div>
       <div className="grid grid-cols-2 md:flex">
         {filters.map((f) => (

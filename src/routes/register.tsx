@@ -3,8 +3,8 @@ import { useState, useRef, type ChangeEvent, type FormEvent } from "react";
 import { pageMeta } from "@/lib/seo";
 import { AuthLayout, RoleTabs } from "@/components/site/AuthLayout";
 import { FieldLabel } from "@/components/site/primitives";
-import { Upload, FileText, X, CheckCircle2, ArrowRight } from "lucide-react";
-import { loginUser } from "@/lib/auth";
+import { Upload, FileText, X, CheckCircle2, ArrowRight, Loader2, Mail } from "lucide-react";
+import { registerStudentWithResume, registerCompany } from "@/lib/api";
 
 export const Route = createFileRoute("/register")({
   head: () =>
@@ -36,6 +36,8 @@ function Register() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmationRequired, setConfirmationRequired] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,8 +95,10 @@ function Register() {
     }
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+
     if (role === "student") {
       if (
         !studentForm.fullName.trim() ||
@@ -119,6 +123,29 @@ function Register() {
         setErrorMessage("Please upload your resume (PDF/DOCX).");
         return;
       }
+
+      try {
+        setIsSubmitting(true);
+        const res = await registerStudentWithResume({
+          full_name: studentForm.fullName,
+          college: studentForm.college,
+          team_code: studentForm.teamCode,
+          mobile: studentForm.mobile,
+          email: studentForm.email,
+          password: studentForm.password,
+          resume: resumeFile,
+        });
+
+        if (res.confirmationRequired) {
+          setConfirmationRequired(true);
+        }
+        setIsSubmitted(true);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Registration failed. Please try again.";
+        setErrorMessage(msg);
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       if (
         !companyForm.companyName.trim() ||
@@ -129,26 +156,70 @@ function Register() {
         setErrorMessage("Please fill in all company fields.");
         return;
       }
-    }
 
-      if (role === "student") {
-        loginUser({
-          role: "student",
-          name: studentForm.fullName,
-          teamCode: studentForm.teamCode,
-          email: studentForm.email,
+      try {
+        setIsSubmitting(true);
+        const res = await registerCompany({
+          company_name: companyForm.companyName,
+          contact_person: companyForm.contactPerson,
+          work_email: companyForm.workEmail,
+          password: companyForm.password,
         });
-      } else {
-        loginUser({
-          role: "company",
-          email: companyForm.workEmail,
-        });
+
+        if (res.confirmationRequired) {
+          setConfirmationRequired(true);
+        }
+        setIsSubmitted(true);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Company registration failed. Please try again.";
+        setErrorMessage(msg);
+      } finally {
+        setIsSubmitting(false);
       }
-
-      setIsSubmitted(true);
-    };
+    }
+  };
 
   if (isSubmitted) {
+    if (confirmationRequired) {
+      return (
+        <AuthLayout
+          title={
+            <>
+              Verify<br />email.
+            </>
+          }
+          aside="A confirmation link was sent to your inbox. Please verify your email before logging in to access opportunities."
+        >
+          <div className="space-y-6">
+            <div className="border border-[#7484FE] bg-[#0A0A0A] p-6 text-[#F7F2F6]">
+              <div className="flex items-center gap-3 text-[#7484FE]">
+                <Mail className="h-6 w-6 shrink-0" />
+                <p className="eyebrow text-sm font-bold text-foreground">
+                  Verification Email Sent
+                </p>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                We've sent a verification email to{" "}
+                <span className="font-mono text-[#33FF67]">
+                  {role === "student" ? studentForm.email : companyForm.workEmail}
+                </span>
+                . Please click the confirmation link in that email to activate your account.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Once confirmed, you can log in using your {role === "student" ? "Team Code / Email" : "Work Email"} and password.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Link to="/login" className="btn btn-signal w-full">
+                Proceed to Login <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        </AuthLayout>
+      );
+    }
+
     return (
       <AuthLayout
         title={
@@ -168,7 +239,7 @@ function Register() {
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
               {role === "student"
-                ? `Welcome, ${studentForm.fullName}! Your registration and resume have been recorded under team code ${studentForm.teamCode}.`
+                ? `Welcome, ${studentForm.fullName}! Your registration and resume have been securely saved under team code ${studentForm.teamCode}.`
                 : `Welcome, ${companyForm.companyName}! Your company account is registered under ${companyForm.workEmail}.`}
             </p>
 
@@ -213,6 +284,7 @@ function Register() {
               type="button"
               onClick={() => {
                 setIsSubmitted(false);
+                setConfirmationRequired(false);
                 setResumeFile(null);
                 setStudentForm({
                   fullName: "",
@@ -488,8 +560,15 @@ function Register() {
           </>
         )}
 
-        <button type="submit" className="btn btn-signal w-full">
-          Create account
+        <button type="submit" disabled={isSubmitting} className="btn btn-signal w-full disabled:opacity-50">
+          {isSubmitting ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Processing registration...
+            </span>
+          ) : (
+            "Create account"
+          )}
         </button>
 
         <p className="text-center text-sm text-muted-foreground">
