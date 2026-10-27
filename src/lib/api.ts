@@ -343,20 +343,19 @@ export async function loginCompany(email: string, password: string) {
 }
 
 /**
- * Fetch real internship listings from Supabase.
+ * Fetch real internship listings from Supabase using public_opportunities view.
  * Enforces Recruiter Shield: company_id is omitted and company name is masked as Confidential.
  */
 export async function getOpportunities(): Promise<Opportunity[]> {
   const { data, error } = await supabase
-    .from("internships")
+    .from("public_opportunities")
     .select(
       "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at"
     )
-    .eq("status", "open")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.warn("Could not fetch internships from Supabase:", error.message);
+    console.warn("Could not fetch opportunities from Supabase:", error.message);
     return [];
   }
 
@@ -368,11 +367,11 @@ export async function getOpportunities(): Promise<Opportunity[]> {
 }
 
 /**
- * Fetch opportunity by ID without exposing company identity.
+ * Fetch opportunity by ID without exposing company identity using public_opportunities view.
  */
 export async function getOpportunityById(id: string): Promise<Opportunity | null> {
   const { data, error } = await supabase
-    .from("internships")
+    .from("public_opportunities")
     .select(
       "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at"
     )
