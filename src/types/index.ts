@@ -11,6 +11,8 @@ export type StudentProfile = Base & {
   graduation_year: number | null;
   skills: string[];
   resume_path: string | null;
+  mobile?: string | null;
+  team_code?: string | null;
 };
 
 export type CompanyProfile = Base & {

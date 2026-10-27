@@ -20,12 +20,8 @@ export const EVENT = {
 
 export const NAV = [
   { to: "/", label: "Home" },
-  { to: "/about", label: "About" },
   { to: "/internships", label: "Opportunities" },
-  { to: "/companies", label: "Companies" },
-  { to: "/how-it-works", label: "How It Works" },
-  { to: "/schedule", label: "Schedule" },
-  { to: "/faq", label: "FAQ" },
+  { to: "/about", label: "About" },
 ] as const;
 
 export const JOURNEY = [

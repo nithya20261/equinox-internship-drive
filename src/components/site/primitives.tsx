@@ -68,8 +68,8 @@ export function PageHero({ label, title, children }: { label: string; title: Rea
 
 export function TbaBadge({ children = "To Be Announced" }: { children?: ReactNode }) {
   return (
-    <span className="eyebrow inline-flex items-center gap-2 border border-dashed border-foreground/40 px-2 py-1 text-[0.65rem] text-muted-foreground">
-      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-signal" aria-hidden />
+    <span className="font-mono inline-flex items-center gap-2 border border-[#2A2A2A] bg-[#0A0A0A] px-2.5 py-1 text-[0.65rem] text-[#F7F2F6]/75">
+      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-[#33FF67]" aria-hidden />
       {children}
     </span>
   );
@@ -77,11 +77,11 @@ export function TbaBadge({ children = "To Be Announced" }: { children?: ReactNod
 
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
-    <div className="hatch relative border border-border px-6 py-16 text-center md:py-24">
-      <div className="mx-auto max-w-lg bg-background/90 px-4 py-6">
+    <div className="hatch relative border border-[#2A2A2A] bg-black px-6 py-16 text-center md:py-24">
+      <div className="mx-auto max-w-lg bg-[#0A0A0A] border border-[#2A2A2A] px-6 py-8">
         <TbaBadge>Coming Soon</TbaBadge>
-        <h3 className="headline mt-5 text-3xl md:text-4xl">{title}</h3>
-        <p className="mt-3 text-muted-foreground">{body}</p>
+        <h3 className="headline mt-5 text-3xl md:text-4xl text-[#F7F2F6]">{title}</h3>
+        <p className="mt-3 text-sm text-[#F7F2F6]/60 leading-relaxed">{body}</p>
         {action && <div className="mt-6 flex justify-center">{action}</div>}
       </div>
     </div>

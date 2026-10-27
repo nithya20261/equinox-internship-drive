@@ -12,11 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as ContactRouteImport } from './routes/contact'
-import { Route as FaqRouteImport } from './routes/faq'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
-import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as CompaniesIndexRouteImport } from './routes/companies.index'
 import { Route as CompaniesIdRouteImport } from './routes/companies.$id'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard.admin'
@@ -40,11 +38,6 @@ const ContactRoute = ContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FaqRoute = FaqRouteImport.update({
-  id: '/faq',
-  path: '/faq',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const HowItWorksRoute = HowItWorksRouteImport.update({
   id: '/how-it-works',
   path: '/how-it-works',
@@ -58,11 +51,6 @@ const LoginRoute = LoginRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ScheduleRoute = ScheduleRouteImport.update({
-  id: '/schedule',
-  path: '/schedule',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CompaniesIndexRoute = CompaniesIndexRouteImport.update({
@@ -105,11 +93,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/contact': typeof ContactRoute
-  '/faq': typeof FaqRoute
   '/how-it-works': typeof HowItWorksRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
-  '/schedule': typeof ScheduleRoute
   '/companies/$id': typeof CompaniesIdRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/company': typeof DashboardCompanyRoute
@@ -122,11 +108,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/contact': typeof ContactRoute
-  '/faq': typeof FaqRoute
   '/how-it-works': typeof HowItWorksRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
-  '/schedule': typeof ScheduleRoute
   '/companies/$id': typeof CompaniesIdRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/company': typeof DashboardCompanyRoute
@@ -140,11 +124,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/contact': typeof ContactRoute
-  '/faq': typeof FaqRoute
   '/how-it-works': typeof HowItWorksRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
-  '/schedule': typeof ScheduleRoute
   '/companies/$id': typeof CompaniesIdRoute
   '/dashboard/admin': typeof DashboardAdminRoute
   '/dashboard/company': typeof DashboardCompanyRoute
@@ -159,11 +141,9 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/contact'
-    | '/faq'
     | '/how-it-works'
     | '/login'
     | '/register'
-    | '/schedule'
     | '/companies/$id'
     | '/dashboard/admin'
     | '/dashboard/company'
@@ -176,11 +156,9 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/contact'
-    | '/faq'
     | '/how-it-works'
     | '/login'
     | '/register'
-    | '/schedule'
     | '/companies/$id'
     | '/dashboard/admin'
     | '/dashboard/company'
@@ -193,11 +171,9 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/contact'
-    | '/faq'
     | '/how-it-works'
     | '/login'
     | '/register'
-    | '/schedule'
     | '/companies/$id'
     | '/dashboard/admin'
     | '/dashboard/company'
@@ -211,11 +187,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   ContactRoute: typeof ContactRoute
-  FaqRoute: typeof FaqRoute
   HowItWorksRoute: typeof HowItWorksRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
-  ScheduleRoute: typeof ScheduleRoute
   CompaniesIdRoute: typeof CompaniesIdRoute
   DashboardAdminRoute: typeof DashboardAdminRoute
   DashboardCompanyRoute: typeof DashboardCompanyRoute
@@ -248,13 +222,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/faq': {
-      id: '/faq'
-      path: '/faq'
-      fullPath: '/faq'
-      preLoaderRoute: typeof FaqRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/how-it-works': {
       id: '/how-it-works'
       path: '/how-it-works'
@@ -274,13 +241,6 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/schedule': {
-      id: '/schedule'
-      path: '/schedule'
-      fullPath: '/schedule'
-      preLoaderRoute: typeof ScheduleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/companies/': {
@@ -339,11 +299,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   ContactRoute: ContactRoute,
-  FaqRoute: FaqRoute,
   HowItWorksRoute: HowItWorksRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
-  ScheduleRoute: ScheduleRoute,
   CompaniesIdRoute: CompaniesIdRoute,
   DashboardAdminRoute: DashboardAdminRoute,
   DashboardCompanyRoute: DashboardCompanyRoute,
