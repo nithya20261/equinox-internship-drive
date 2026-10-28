@@ -24,7 +24,7 @@ const COMPANY_STEPS = [
 export function AboutPage() {
   const blocks = [
     {
-      k: "Equinox E-Summit 2K26",
+      k: "The Equinox 2.0",
       v: "A premier 2-day entrepreneurship summit at MLR Institute of Technology, Hyderabad, taking place on 30 & 31 October. Students explore entrepreneurship, startups, cutting-edge innovation, real-world industry challenges and internship opportunities.",
     },
     {
@@ -38,34 +38,36 @@ export function AboutPage() {
   ];
 
   return (
-    <>
+    <div className="riso-texture brochure-grid min-h-screen">
       <PageHero
-        label="About & How It Works"
+        label="About &amp; How It Works"
         title={
           <>
             Where ideas<br />meet industry.
           </>
         }
       >
-        {EVENT.stats[0].value} students and {EVENT.stats[1].value} startups expected on 30 & 31 October at MLRIT Hyderabad. Explore the summit background and the simple step-by-step process for students and companies.
+        {EVENT.stats[0].value} students and {EVENT.stats[1].value} startups expected on 30 &amp; 31 October at MLRIT Hyderabad. Explore the summit background and the simple step-by-step process for students and companies.
       </PageHero>
 
       {/* Part 1: About the Summit & Organizers */}
-      <section className="py-20">
+      <section className="py-16 sm:py-20">
         <Container>
-          <div className="mb-12 border-b border-foreground pb-4">
-            <Eyebrow index="01">The Summit & Organisers</Eyebrow>
-            <h2 className="headline mt-4 text-3xl md:text-5xl">Built by CIE at MLRIT</h2>
+          <div className="mb-12 border-b border-white/20 pb-4">
+            <Eyebrow index="01">The Summit &amp; Organisers</Eyebrow>
+            <h2 className="font-display-title mt-4 text-3xl sm:text-4xl md:text-5xl uppercase text-[#F7F2F6]">
+              Built by CIE at MLRIT
+            </h2>
           </div>
 
-          <div className="space-y-0">
+          <div className="space-y-4">
             {blocks.map((b, i) => (
               <Reveal key={b.k}>
-                <div className="grid gap-6 border-t border-foreground py-10 md:grid-cols-12">
+                <div className="rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 sm:p-8 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs grid gap-6 md:grid-cols-12 md:items-center">
                   <div className="md:col-span-4">
                     <Eyebrow index={String(i + 1).padStart(2, "0")}>{b.k}</Eyebrow>
                   </div>
-                  <p className="headline text-2xl md:col-span-8 md:text-3xl lg:text-4xl">
+                  <p className="font-sans text-base sm:text-lg md:col-span-8 text-white/90 leading-relaxed">
                     {b.v}
                   </p>
                 </div>
@@ -73,14 +75,14 @@ export function AboutPage() {
             ))}
           </div>
 
-          <div className="mt-12 grid border border-foreground sm:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {EVENT.stats.map((s) => (
               <div
                 key={s.label}
-                className="border-b border-foreground p-6 sm:border-b-0 sm:border-r last:border-none"
+                className="rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs"
               >
-                <p className="display text-5xl text-signal md:text-6xl">{s.value}</p>
-                <p className="eyebrow mt-3 text-muted-foreground">{s.label}</p>
+                <p className="font-display-title text-4xl sm:text-5xl text-[#33FF67]">{s.value}</p>
+                <p className="font-sans mt-2 text-sm text-white/80 font-medium">{s.label}</p>
               </div>
             ))}
           </div>
@@ -88,18 +90,20 @@ export function AboutPage() {
       </section>
 
       {/* Part 2: How It Works */}
-      <section className="border-t border-border bg-paper-deep py-20">
+      <section className="border-t border-white/20 bg-[#151515] brochure-grid-dense py-16 sm:py-20">
         <Container>
-          <div className="border-b border-foreground pb-4">
-            <Eyebrow index="02">Process & Journey</Eyebrow>
-            <h2 className="headline mt-4 text-3xl md:text-5xl">Five steps. One platform.</h2>
-            <p className="mt-2 text-muted-foreground">
+          <div className="border-b border-white/20 pb-4">
+            <Eyebrow index="02">Process &amp; Journey</Eyebrow>
+            <h2 className="font-display-title mt-4 text-3xl sm:text-4xl md:text-5xl uppercase text-[#F7F2F6]">
+              Five steps. One platform.
+            </h2>
+            <p className="mt-2 font-sans text-sm sm:text-base text-white/70">
               Everything students and companies need to know to participate seamlessly.
             </p>
           </div>
 
           {/* For Students */}
-          <div className="mt-14">
+          <div className="mt-12">
             <Eyebrow index="A">For Students</Eyebrow>
             <div className="mt-6">
               <Journey />
@@ -107,32 +111,34 @@ export function AboutPage() {
           </div>
 
           {/* For Companies */}
-          <div className="mt-20 grid gap-10 md:grid-cols-12">
-            <div className="md:col-span-4">
-              <Eyebrow index="B">For Companies & Startups</Eyebrow>
-              <h3 className="headline mt-4 text-3xl md:text-4xl">Hiring at Equinox</h3>
-              <p className="mt-4 text-sm text-muted-foreground">
+          <div className="mt-16 grid gap-8 md:grid-cols-12 md:items-start">
+            <div className="md:col-span-4 rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.35)]">
+              <Eyebrow index="B">For Companies &amp; Startups</Eyebrow>
+              <h3 className="font-display-title mt-4 text-2xl uppercase text-[#F7F2F6]">
+                Hiring at Equinox
+              </h3>
+              <p className="mt-3 font-sans text-sm text-white/70 leading-relaxed">
                 Meet motivated candidates face-to-face on campus. Evaluate resumes, conduct in-person interviews, and recruit the right fit.
               </p>
             </div>
-            <ol className="border-t border-foreground md:col-span-8">
+            <ol className="md:col-span-8 rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] divide-y divide-white/10">
               {COMPANY_STEPS.map((step, idx) => (
                 <li
                   key={step}
-                  className="flex items-baseline gap-6 border-b border-border py-5"
+                  className="flex items-baseline gap-4 py-3.5 first:pt-0 last:pb-0"
                 >
-                  <span className="eyebrow text-signal">{String(idx + 1).padStart(2, "0")}</span>
-                  <span className="headline text-xl md:text-2xl">{step}</span>
+                  <span className="font-mono text-xs font-bold text-[#7484FE]">{String(idx + 1).padStart(2, "0")}</span>
+                  <span className="font-sans text-sm sm:text-base text-white/90 font-medium">{step}</span>
                 </li>
               ))}
             </ol>
           </div>
 
-          <div className="mt-16 border-t border-foreground pt-12">
+          <div className="mt-12 border-t border-white/20 pt-8">
             <CtaPair />
           </div>
         </Container>
       </section>
-    </>
+    </div>
   );
 }

@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 
 interface CinematicIntroProps {
   onComplete: () => void;
@@ -9,123 +8,125 @@ export function CinematicIntro({ onComplete }: CinematicIntroProps) {
   const [phase, setPhase] = useState<1 | 2 | 3>(1);
   const [isFadingOut, setIsFadingOut] = useState(false);
 
+  const finishIntro = useCallback(() => {
+    if (isFadingOut) return;
+    window.scrollTo(0, 0);
+    setIsFadingOut(true);
+    setTimeout(() => {
+      onComplete();
+    }, 500);
+  }, [isFadingOut, onComplete]);
+
   useEffect(() => {
-    // Cinematic timing: punchy, sleek, and automated
+    // Lock scroll to top while intro is visible
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+
     const timer1 = setTimeout(() => setPhase(2), 350);
-    const timer2 = setTimeout(() => setPhase(3), 1050);
+    const timer2 = setTimeout(() => setPhase(3), 900);
     const timer3 = setTimeout(() => {
-      setIsFadingOut(true);
-      setTimeout(onComplete, 600);
+      finishIntro();
     }, 2800);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Enter" || e.key === " ") {
-        triggerFinish();
+        e.preventDefault();
+        finishIntro();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      document.body.style.overflow = originalOverflow;
       clearTimeout(timer1);
       clearTimeout(timer2);
       clearTimeout(timer3);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onComplete]);
-
-  const triggerFinish = () => {
-    if (isFadingOut) return;
-    setIsFadingOut(true);
-    setTimeout(onComplete, 500);
-  };
+  }, [finishIntro]);
 
   return (
     <div
-      onClick={triggerFinish}
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-[#F7F2F6] transition-opacity duration-600 select-none overflow-hidden cursor-pointer ${
+      onClick={finishIntro}
+      className={`fixed inset-0 z-[999] flex flex-col items-center justify-center bg-[#151515] text-[#F7F2F6] transition-opacity duration-500 ease-out select-none overflow-hidden cursor-pointer brochure-grid-dense ${
         isFadingOut ? "opacity-0 pointer-events-none" : "opacity-100"
       }`}
       role="dialog"
       aria-modal="true"
-      aria-label="Equinox E-Summit 2K26 Intro"
+      aria-label="The Equinox 2.0 Internship Drive Intro"
     >
-      {/* Background Cyber Grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#2A2A2A18_1px,transparent_1px),linear-gradient(to_bottom,#2A2A2A18_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none" />
-
-      {/* Radial energy glow behind center */}
-      <div className="absolute h-96 w-96 rounded-full bg-gradient-to-tr from-[#7484FE]/20 via-[#33FF67]/15 to-transparent blur-3xl pointer-events-none" />
+      {/* Background Starfield Glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(116,132,254,0.18)_0%,_rgba(51,255,103,0.08)_45%,_transparent_75%)] pointer-events-none" />
 
       {/* Top Bar with Skip */}
       <div className="absolute top-6 right-6 z-20">
         <button
           onClick={(e) => {
             e.stopPropagation();
-            triggerFinish();
+            finishIntro();
           }}
-          className="group flex items-center gap-2 border border-[#2A2A2A] bg-black/80 px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#F7F2F6]/70 transition-all hover:border-[#7484FE] hover:text-[#33FF67]"
+          className="group flex items-center gap-2 rounded-full border border-white/20 bg-[#151515]/90 px-4 py-2 font-sans text-xs font-semibold text-[#F7F2F6]/90 backdrop-blur-md shadow-lg transition-all hover:border-[#33FF67] hover:text-[#33FF67]"
         >
           <span>Skip</span>
-          <span className="text-[10px] text-[#7484FE] group-hover:translate-x-0.5 transition-transform">[ESC]</span>
+          <span className="font-mono text-[10px] text-[#7484FE] group-hover:translate-x-0.5 transition-transform">[ESC]</span>
         </button>
       </div>
 
       {/* Central Cinematic Stack */}
       <div className="relative z-10 flex flex-col items-center text-center px-4 max-w-4xl pointer-events-none">
-        {/* Phase 1: Tag & Edition badge */}
+        {/* Phase 1: Official Equinox Logo Reveal */}
         <div
-          className={`flex items-center gap-3 transition-all duration-600 transform ${
+          className={`flex flex-col items-center transition-all duration-500 transform ${
             phase >= 1 ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"
           }`}
         >
-          <span className="font-mono text-xs md:text-sm font-semibold tracking-[0.25em] text-[#7484FE] uppercase">
-            THE
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#2A2A2A] bg-gradient-to-r from-[#7484FE] to-[#33FF67] px-3 py-0.5 font-mono text-[11px] font-bold tracking-wider text-black">
-            <Sparkles className="h-3 w-3 fill-black" /> 2nd Edition
-          </span>
+          <img
+            src="/equinox-logo.svg"
+            alt="The Equinox 2.0 E-Summit 2K26"
+            width="380"
+            height="160"
+            className="w-64 sm:w-80 md:w-96 h-auto object-contain drop-shadow-[0_0_30px_rgba(116,132,254,0.3)]"
+          />
         </div>
 
-        {/* Phase 2: Massive EQUINOX */}
+        {/* Phase 2: Tagline */}
         <div
-          className={`mt-4 font-display font-black tracking-tighter text-6xl sm:text-8xl md:text-9xl lg:text-[10rem] text-[#F7F2F6] transition-all duration-700 transform ${
+          className={`mt-4 flex items-center gap-2 transition-all duration-500 transform ${
             phase >= 2 ? "opacity-100 scale-100" : "opacity-0 scale-95"
           }`}
         >
-          EQUINOX
+          <span className="font-mono text-xs font-bold uppercase tracking-widest text-[#33FF67]">
+            # WHERE PASSION MEETS PERSEVERANCE
+          </span>
         </div>
 
-        {/* E-SUMMIT 2K26 gradient title */}
+        {/* Phase 3: Sub-Event 06 - INTERNSHIP DRIVE Reveal */}
         <div
-          className={`mt-2 font-display font-extrabold tracking-widest text-2xl sm:text-4xl md:text-5xl uppercase bg-gradient-to-r from-[#7484FE] via-[#33FF67] to-[#7484FE] bg-clip-text text-transparent transition-all duration-600 ${
-            phase >= 2 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          className={`mt-6 flex flex-col items-center transition-all duration-600 ${
+            phase >= 3 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
-          E-SUMMIT 2K26
-        </div>
-
-        {/* Phase 3: INTERNSHIP DRIVE Reveal */}
-        <div
-          className={`mt-6 flex flex-col items-center transition-all duration-700 ${
-            phase >= 3 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-          }`}
-        >
-          <div className="h-px w-32 bg-gradient-to-r from-transparent via-[#33FF67] to-transparent mb-5" />
-
-          <div className="relative inline-block">
-            <span className="font-display font-black tracking-[0.18em] text-3xl sm:text-5xl md:text-6xl text-[#F7F2F6] uppercase drop-shadow-[0_0_24px_rgba(116,132,254,0.4)]">
-              INTERNSHIP DRIVE
-            </span>
+          <div className="mb-3 inline-block border border-white/20 bg-[#2A2A2A] px-3.5 py-1 font-mono text-xs font-bold uppercase tracking-widest text-[#7484FE] shadow-[2px_2px_0px_#7484FE]">
+            Official Sub-Event · Page 06
           </div>
 
-          <p className="mt-3 font-mono text-xs sm:text-sm tracking-widest text-[#F7F2F6]/60 uppercase">
-            Centre for Innovation & Entrepreneurship · MLRIT Hyderabad
+          <h1 className="font-display-title text-4xl sm:text-6xl md:text-7xl font-black uppercase tracking-tight">
+            <span className="mr-2 sm:mr-3 inline-block bg-[#F7F2F6] px-3.5 py-1 text-[#2A2A2A] shadow-[4px_4px_0px_#2A2A2A]">
+              INTERNSHIP
+            </span>
+            <span className="text-[#F7F2F6]">DRIVE</span>
+          </h1>
+
+          <p className="mt-3 font-sans text-sm sm:text-base text-white/75">
+            Centre for Innovation &amp; Entrepreneurship · MLRIT Hyderabad
           </p>
         </div>
       </div>
 
       {/* Bottom hint line */}
-      <div className="absolute bottom-6 font-mono text-[10px] tracking-widest text-[#F7F2F6]/40 uppercase">
-        CLICK ANYWHERE OR PRESS ESC TO SKIP
+      <div className="absolute bottom-6 font-sans text-xs text-white/50">
+        Click anywhere or press <span className="font-mono text-white/80">[ESC]</span> to skip
       </div>
     </div>
   );
