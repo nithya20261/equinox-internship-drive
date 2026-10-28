@@ -51,3 +51,32 @@ export const FAQS = [
 ] as const;
 
 export const INTERNSHIP_FIELDS = ["Company", "Role", "Domain", "Location / Mode", "Duration", "Skills"] as const;
+
+export const INTERNSHIP_CATEGORIES = {
+  technical: [
+    "Artificial Intelligence & Machine Learning",
+    "Full-Stack Web Development",
+    "Frontend Engineering",
+    "Backend & Cloud Architecture",
+    "Mobile App Development",
+    "Data Science & Big Data Analytics",
+    "DevOps, SRE & Cloud Infrastructure",
+    "Cybersecurity & Information Defense",
+    "IoT, Embedded Systems & Robotics",
+    "Blockchain & Web3 Technologies",
+  ],
+  nonTechnical: [
+    "UI/UX Design & Product Experience",
+    "Product Management & Strategy",
+    "Digital Marketing, SEO & Growth Hacking",
+    "Content Strategy & Copywriting",
+    "Business Development & Corporate Sales",
+    "Human Resources & Talent Acquisition",
+    "Operations & Supply Chain Management",
+    "Financial Analysis & FinTech Operations",
+    "Public Relations, Media & Event Management",
+    "Customer Success & Client Relations",
+  ],
+} as const;
+
+export type InternshipTrack = "all" | "technical" | "non-technical";

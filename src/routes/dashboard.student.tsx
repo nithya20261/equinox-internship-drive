@@ -213,6 +213,21 @@ function StudentDashboard() {
                   <Clock className="h-3 w-3" />
                   {new Date(app.created_at).toLocaleDateString()}
                 </span>
+                {(app.resume_url || resumeUrl) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const targetResume = app.resume_url || resumeUrl;
+                      if (!targetResume) return;
+                      const url = await getResumeDownloadUrl(targetResume);
+                      if (url) window.open(url, "_blank", "noopener,noreferrer");
+                    }}
+                    className="mt-1 flex items-center gap-1 font-mono text-[11px] text-[#7484FE] hover:underline"
+                  >
+                    <Download className="h-3 w-3" />
+                    <span>View Submitted Resume</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

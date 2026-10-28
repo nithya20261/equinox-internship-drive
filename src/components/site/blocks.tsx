@@ -42,10 +42,16 @@ export function OpportunitySlot({
   n = 1,
   item,
   isLoggedIn = false,
+  selectable = false,
+  isSelected = false,
+  onToggleSelect,
 }: {
   n?: number;
   item?: Opportunity;
   isLoggedIn?: boolean;
+  selectable?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const roles = [
     { title: "AI Systems & Infrastructure Intern", domain: "Artificial Intelligence", mode: "On-Campus" },
@@ -61,9 +67,26 @@ export function OpportunitySlot({
   const detailId = item?.id || "preview";
 
   return (
-    <article className="group grid gap-4 border-b border-[#2A2A2A] py-6 transition-colors hover:bg-[#0A0A0A] md:grid-cols-12 md:items-center md:px-4">
+    <article
+      className={`group grid gap-4 border-b border-[#2A2A2A] py-6 transition-colors md:grid-cols-12 md:items-center md:px-4 ${
+        isSelected ? "bg-[#7484FE]/10 border-l-2 border-l-[#7484FE]" : "hover:bg-[#0A0A0A]"
+      }`}
+    >
       <div className="flex items-center gap-4 md:col-span-5">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-[#2A2A2A] bg-black text-[#7484FE] font-mono text-xs font-bold">
+        {selectable && item?.id ? (
+          <label className="relative flex cursor-pointer items-center justify-center p-1" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect?.()}
+              className="h-5 w-5 rounded border border-[#2A2A2A] bg-black accent-[#33FF67] cursor-pointer"
+              aria-label={`Select ${title}`}
+            />
+          </label>
+        ) : null}
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center border font-mono text-xs font-bold transition-colors ${
+          isSelected ? "border-[#33FF67] bg-[#33FF67]/10 text-[#33FF67]" : "border-[#2A2A2A] bg-black text-[#7484FE]"
+        }`}>
           {String(n).padStart(2, "0")}
         </div>
         <div>

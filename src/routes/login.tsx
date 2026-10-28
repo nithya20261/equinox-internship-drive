@@ -4,7 +4,7 @@ import { pageMeta } from "@/lib/seo";
 import { AuthLayout, RoleTabs } from "@/components/site/AuthLayout";
 import { FieldLabel } from "@/components/site/primitives";
 import { Loader2 } from "lucide-react";
-import { loginStudent, loginCompany } from "@/lib/api";
+import { loginStudent, loginAdmin } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   head: () => pageMeta("Login", "Log in to your Equinox E-Summit 2K26 Internship Drive account."),
@@ -13,16 +13,16 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const router = useRouter();
-  const [role, setRole] = useState<"student" | "company">("student");
+  const [role, setRole] = useState<"student" | "admin">("student");
   
   // Student login fields: Name, Team code, Password
   const [studentName, setStudentName] = useState("");
   const [teamCode, setTeamCode] = useState("");
   const [studentPassword, setStudentPassword] = useState("");
 
-  // Company login fields: Email, Password
-  const [companyEmail, setCompanyEmail] = useState("");
-  const [companyPassword, setCompanyPassword] = useState("");
+  // Admin login fields: Username (EQUINOXCIE), Password
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -42,9 +42,12 @@ function Login() {
         await router.invalidate();
         window.location.href = "/internships";
       } else {
-        await loginCompany(companyEmail.trim(), companyPassword);
+        await loginAdmin({
+          username: adminUsername.trim(),
+          password: adminPassword,
+        });
         await router.invalidate();
-        window.location.href = "/dashboard/company";
+        window.location.href = "/dashboard/admin";
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed. Please check your credentials.";
@@ -135,31 +138,31 @@ function Login() {
         ) : (
           <>
             <div>
-              <FieldLabel htmlFor="l-company-email">Work email</FieldLabel>
+              <FieldLabel htmlFor="l-admin-username">Admin username</FieldLabel>
               <input
-                id="l-company-email"
-                type="email"
-                autoComplete="email"
-                value={companyEmail}
+                id="l-admin-username"
+                type="text"
+                autoComplete="username"
+                value={adminUsername}
                 onChange={(e) => {
-                  setCompanyEmail(e.target.value);
+                  setAdminUsername(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                className="field"
-                placeholder="talent@acme.com"
+                className="field uppercase"
+                placeholder="EQUINOXCIE"
                 required
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="l-company-pass">Password</FieldLabel>
+              <FieldLabel htmlFor="l-admin-pass">Password</FieldLabel>
               <input
-                id="l-company-pass"
+                id="l-admin-pass"
                 type="password"
                 autoComplete="current-password"
-                value={companyPassword}
+                value={adminPassword}
                 onChange={(e) => {
-                  setCompanyPassword(e.target.value);
+                  setAdminPassword(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 className="field"

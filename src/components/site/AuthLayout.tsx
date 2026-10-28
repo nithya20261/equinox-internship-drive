@@ -52,8 +52,8 @@ export function RoleTabs({
   value,
   onChange,
 }: {
-  value: "student" | "company";
-  onChange: (v: "student" | "company") => void;
+  value: "student" | "admin";
+  onChange: (v: "student" | "admin") => void;
 }) {
   return (
     <div
@@ -61,7 +61,7 @@ export function RoleTabs({
       aria-label="Account type"
       className="grid grid-cols-2 border border-[#2A2A2A] bg-black"
     >
-      {(["student", "company"] as const).map((r) => (
+      {(["student", "admin"] as const).map((r) => (
         <button
           key={r}
           role="tab"
@@ -74,7 +74,7 @@ export function RoleTabs({
               : "text-[#F7F2F6]/60 hover:text-[#F7F2F6] hover:bg-[#2A2A2A]/40"
           }`}
         >
-          {r === "student" ? "Student" : "Company / Startup"}
+          {r === "student" ? "Student" : "Admin"}
         </button>
       ))}
     </div>

@@ -39,7 +39,7 @@ export function Logo() {
 export function Header() {
   const [open, setOpen] = useState(false);
   const { user, isLoggedIn, logout } = useAuth();
-  const dashboardLink = user?.role === "company" ? "/dashboard/company" : "/dashboard/student";
+  const dashboardLink = user?.role === "admin" ? "/dashboard/admin" : "/dashboard/student";
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#2A2A2A] bg-black/90 backdrop-blur-md">

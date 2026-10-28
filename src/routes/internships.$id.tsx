@@ -28,6 +28,9 @@ function Detail() {
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
 
+  const [resumeMode, setResumeMode] = useState<"profile" | "custom">("profile");
+  const [customResume, setCustomResume] = useState<File | null>(null);
+
   useEffect(() => {
     if (id && id !== "preview") {
       getOpportunityById(id)
@@ -75,9 +78,16 @@ function Detail() {
     setApplyError(null);
     setApplySuccess(null);
 
+    if (resumeMode === "custom" && !customResume) {
+      setApplyError("Please select a resume file to upload (PDF, DOC, or DOCX).");
+      return;
+    }
+
     try {
       setIsApplying(true);
-      const res = await submitApplication(id);
+      const res = await submitApplication(id, {
+        customResume: resumeMode === "custom" && customResume ? customResume : undefined,
+      });
       if (res.alreadyApplied) {
         setApplySuccess("You have already applied for this role! Check your Student Dashboard to track status.");
       } else {
@@ -243,6 +253,51 @@ function Detail() {
                     </>
                   ) : (
                     <>
+                      {/* Resume choice options */}
+                      <div className="border border-[#2A2A2A] bg-black p-3 space-y-2">
+                        <p className="font-mono text-[10px] uppercase font-bold text-[#7484FE]">
+                          Resume Submission
+                        </p>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name="detailResumeChoice"
+                            value="profile"
+                            checked={resumeMode === "profile"}
+                            onChange={() => setResumeMode("profile")}
+                            className="accent-[#33FF67]"
+                          />
+                          <span className="text-[#F7F2F6]">Use Profile Resume</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name="detailResumeChoice"
+                            value="custom"
+                            checked={resumeMode === "custom"}
+                            onChange={() => setResumeMode("custom")}
+                            className="accent-[#33FF67]"
+                          />
+                          <span className="text-[#F7F2F6]">Upload Different Resume</span>
+                        </label>
+
+                        {resumeMode === "custom" && (
+                          <div className="pt-2 border-t border-[#2A2A2A]">
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx"
+                              onChange={(e) => setCustomResume(e.target.files?.[0] || null)}
+                              className="w-full text-[11px] text-[#F7F2F6] file:mr-2 file:border-0 file:bg-[#7484FE] file:px-2 file:py-1 file:font-mono file:text-[10px] file:text-black"
+                            />
+                            {customResume && (
+                              <p className="mt-1 text-[10px] font-mono text-[#33FF67]">
+                                Attached: {customResume.name}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       <button
                         onClick={handleApply}
                         disabled={isApplying || !isStudent}
@@ -259,7 +314,7 @@ function Detail() {
                         )}
                       </button>
                       <p className="text-center text-xs text-muted-foreground">
-                        Your registered resume and team code will be submitted with this application.
+                        Your application record will be created with an independent review status.
                       </p>
                     </>
                   )}

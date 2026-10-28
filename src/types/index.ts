@@ -1,7 +1,7 @@
 // Entity shapes mirroring the planned backend tables. UUID ids + ISO timestamps.
 type Base = { id: string; created_at: string; updated_at: string };
 
-export type UserRole = "student" | "company" | "admin";
+export type UserRole = "student" | "admin";
 
 export type StudentProfile = Base & {
   user_id: string;
@@ -45,6 +45,7 @@ export type Application = Base & {
   internship_id: string;
   student_id: string;
   status: ApplicationStatus;
+  resume_url?: string | null;
 };
 
 export type ScheduleItem = Base & { title: string; starts_at: string; ends_at: string | null; venue: string | null };

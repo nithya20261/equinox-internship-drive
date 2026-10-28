@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
+import { getAuthoritativeProfileRoleServerFn } from "./server-auth";
 
 export interface AuthUser {
   id?: string | undefined;
-  role: "student" | "company";
+  role: "student" | "admin";
   name?: string | undefined;
   teamCode?: string | undefined;
   email?: string | undefined;
@@ -43,38 +44,73 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Sync with existing Supabase session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const metadata = session.user.user_metadata;
-        const role = (metadata?.["role"] as "student" | "company") || "student";
-        const authUser: AuthUser = {
-          id: session.user.id,
-          role,
-          name: (metadata?.["full_name"] as string | undefined) || session.user.email?.split("@")[0],
-          teamCode: metadata?.["team_code"] as string | undefined,
-          email: session.user.email ?? undefined,
-        };
-        loginUser(authUser);
-        setUser(authUser);
-      }
-      setLoading(false);
-    });
+    // 1. Authoritative server check: verify role directly from database
+    const syncAuthoritativeSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          setUser(null);
+          setLoading(false);
+          return;
+        }
 
-    // 2. Listen to Supabase auth events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        const metadata = session.user.user_metadata;
-        const role = (metadata?.["role"] as "student" | "company") || "student";
+        // Authoritative server-side profile check: NEVER trust localStorage, email suffixes, or user_metadata
+        const res = await getAuthoritativeProfileRoleServerFn({
+          data: { userId: session.user.id },
+        });
+
+        if (!res?.role) {
+          logoutUser();
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
         const authUser: AuthUser = {
           id: session.user.id,
-          role,
-          name: (metadata?.["full_name"] as string | undefined) || session.user.email?.split("@")[0],
-          teamCode: metadata?.["team_code"] as string | undefined,
+          role: res.role,
           email: session.user.email ?? undefined,
+          name: session.user.email?.split("@")[0],
         };
+
         loginUser(authUser);
         setUser(authUser);
+      } catch {
+        // Network or server error: do not elevate privileges
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    syncAuthoritativeSession();
+
+    // 2. Listen to Supabase auth events & verify role with authoritative server check
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        try {
+          const res = await getAuthoritativeProfileRoleServerFn({
+            data: { userId: session.user.id },
+          });
+
+          if (!res?.role) {
+            logoutUser();
+            setUser(null);
+            return;
+          }
+
+          const authUser: AuthUser = {
+            id: session.user.id,
+            role: res.role,
+            email: session.user.email ?? undefined,
+            name: session.user.email?.split("@")[0],
+          };
+
+          loginUser(authUser);
+          setUser(authUser);
+        } catch {
+          setUser(null);
+        }
       } else if (event === "SIGNED_OUT") {
         if (typeof window !== "undefined") {
           localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -103,7 +139,7 @@ export function useAuth() {
     loading,
     isLoggedIn: user !== null,
     isStudent: user?.role === "student",
-    isCompany: user?.role === "company",
+    isAdmin: user?.role === "admin",
     login: loginUser,
     logout: logoutUser,
   };

@@ -4,6 +4,8 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Lock, ShieldAlert, ArrowLeft } from "lucide-react";
 import { Container } from "@/components/site/primitives";
 
+import { useAuth } from "@/lib/auth";
+
 export const Route = createFileRoute("/dashboard/admin")({
   head: () => ({
     meta: [
@@ -15,28 +17,20 @@ export const Route = createFileRoute("/dashboard/admin")({
 });
 
 function AdminConsole() {
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("equinox_admin_auth") === "true";
-  });
-  const [passkey, setPasskey] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { user, isAdmin, loading, logout } = useAuth();
 
-  const handleAdminLogin = (e: FormEvent) => {
-    e.preventDefault();
-    // Authorized Organiser security key
-    if (passkey === "CIE-ADMIN-2K26" || passkey.toLowerCase() === "admin") {
-      setIsAdminAuthenticated(true);
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("equinox_admin_auth", "true");
-      }
-      setError(null);
-    } else {
-      setError("Invalid Organiser Passkey. Access is strictly restricted to CIE faculty & leads.");
-    }
-  };
+  if (loading) {
+    return (
+      <Container className="py-20 text-center">
+        <p className="font-mono text-xs text-[#7484FE]">Verifying administrator credentials...</p>
+      </Container>
+    );
+  }
 
-  if (!isAdminAuthenticated) {
+  // Strict server-side verified admin authorization check
+  const isAuthorized = isAdmin && user?.role === "admin";
+
+  if (!isAuthorized) {
     return (
       <Container className="py-20">
         <div className="mx-auto max-w-md border border-[#2A2A2A] bg-[#0A0A0A] p-8 md:p-10 text-center">
@@ -48,33 +42,14 @@ function AdminConsole() {
             Organiser Console Access
           </h1>
           <p className="mt-3 text-xs text-[#F7F2F6]/60 leading-relaxed">
-            This area is restricted to the Centre for Innovation & Entrepreneurship (CIE) core administrative team. Enter your authorized access key.
+            This area is strictly restricted to verified CIE administrators. Please log in with your administrator credentials.
           </p>
 
-          <form onSubmit={handleAdminLogin} className="mt-6 space-y-4 text-left">
-            {error && (
-              <div className="border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-400">
-                {error}
-              </div>
-            )}
-            <div>
-              <label htmlFor="admin-key" className="block font-mono text-[11px] uppercase tracking-wider text-[#F7F2F6]/75 mb-2">
-                Organiser Access Key
-              </label>
-              <input
-                id="admin-key"
-                type="password"
-                value={passkey}
-                onChange={(e) => setPasskey(e.target.value)}
-                placeholder="Enter passkey..."
-                className="field"
-                required
-              />
-            </div>
-            <button type="submit" className="btn btn-signal w-full">
-              Authenticate Console
-            </button>
-          </form>
+          <div className="mt-6">
+            <Link to="/login" className="btn btn-signal w-full">
+              Log in as Administrator
+            </Link>
+          </div>
 
           <div className="mt-6 border-t border-[#2A2A2A] pt-4">
             <Link to="/" className="inline-flex items-center gap-2 font-mono text-xs text-[#F7F2F6]/50 hover:text-[#33FF67]">
@@ -91,18 +66,16 @@ function AdminConsole() {
       <div className="bg-black border-b border-[#2A2A2A] px-6 py-2 flex items-center justify-between text-xs font-mono text-[#F7F2F6]/75">
         <span className="flex items-center gap-2 text-[#33FF67]">
           <span className="h-2 w-2 rounded-full bg-[#33FF67]" />
-          Authenticated: CIE Organiser Console
+          Authenticated: CIE Organiser Console ({user?.email})
         </span>
         <button
           onClick={() => {
-            setIsAdminAuthenticated(false);
-            if (typeof window !== "undefined") {
-              sessionStorage.removeItem("equinox_admin_auth");
-            }
+            logout();
+            window.location.href = "/login";
           }}
           className="text-[#7484FE] hover:underline"
         >
-          Lock Console
+          Sign out
         </button>
       </div>
 

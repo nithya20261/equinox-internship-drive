@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { loginUser } from "./auth";
+import { loginStudentServerFn, loginAdminServerFn } from "./server-auth";
 
 const RESUME_BUCKET = "resumes";
 
@@ -13,13 +14,6 @@ export interface StudentRegistrationInput {
   skills?: string[];
   graduation_year?: number;
   resume: File;
-}
-
-export interface CompanyRegistrationInput {
-  company_name: string;
-  contact_person: string;
-  work_email: string;
-  password: string;
 }
 
 export interface Opportunity {
@@ -43,6 +37,7 @@ export interface StudentApplication {
   internship_id: string;
   status: string;
   created_at: string;
+  resume_url?: string | null;
   internship?: {
     id: string;
     role: string;
@@ -53,9 +48,56 @@ export interface StudentApplication {
   };
 }
 
+export interface BatchApplicationInput {
+  internshipIds: string[];
+  customResume?: File | undefined;
+}
+
+export interface BatchApplicationResult {
+  totalRequested: number;
+  appliedCount: number;
+  duplicateCount: number;
+  alreadyAppliedIds: string[];
+  successfulIds: string[];
+}
+
 /**
- * Register a student and upload their resume securely.
- * Handles email-confirmation mode gracefully if email confirmation is required.
+ * Validate and upload a resume file to the authenticated user's private folder in storage.
+ */
+export async function uploadResumeFile(userId: string, file: File): Promise<string> {
+  const allowedTypes = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
+
+  if (!allowedTypes.includes(file.type) && !file.name.match(/\.(pdf|doc|docx)$/i)) {
+    throw new Error("Resume must be a PDF, DOC, or DOCX file.");
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("Resume file must be under 10MB.");
+  }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const resumePath = `${userId}/${Date.now()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(RESUME_BUCKET)
+    .upload(resumePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(`Failed to upload resume: ${uploadError.message}`);
+  }
+
+  return resumePath;
+}
+
+/**
+ * Register a student and upload their initial profile resume securely.
+ * Handles email-confirmation mode gracefully if email confirmation is enabled in Supabase.
  */
 export async function registerStudentWithResume(input: StudentRegistrationInput) {
   const cleanEmail = input.email.trim().toLowerCase();
@@ -107,37 +149,10 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
   // 3. Upload resume to private 'resumes' storage bucket
   let resumePath: string | null = null;
   if (input.resume) {
-    const file = input.resume;
-    const allowedTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-
-    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(pdf|doc|docx)$/i)) {
-      throw new Error("Resume must be a PDF, DOC, or DOCX file.");
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error("Resume file must be under 10MB.");
-    }
-
     try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      resumePath = `${user.id}/${Date.now()}-${safeName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(RESUME_BUCKET)
-        .upload(resumePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.warn("Resume upload note (storage bucket may be pending):", uploadError.message);
-        // Do not crash registration if the storage bucket is being provisioned
-      }
+      resumePath = await uploadResumeFile(user.id, input.resume);
     } catch (err) {
-      console.warn("Storage upload exception:", err);
+      console.warn("Storage upload exception during registration:", err);
     }
   }
 
@@ -170,63 +185,8 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
 }
 
 /**
- * Register a hiring company account.
- */
-export async function registerCompany(input: CompanyRegistrationInput) {
-  const cleanEmail = input.work_email.trim().toLowerCase();
-
-  const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail,
-    password: input.password,
-    options: {
-      data: {
-        role: "company",
-        company_name: input.company_name.trim(),
-        contact_person: input.contact_person.trim(),
-      },
-    },
-  });
-
-  if (error) throw error;
-
-  const user = data.user;
-  if (!user) throw new Error("Company registration failed.");
-
-  if (!data.session) {
-    return {
-      confirmationRequired: true,
-      message: "Confirmation email sent. Please verify your email before logging in.",
-      user,
-    };
-  }
-
-  // Upsert profile and company record
-  try {
-    await supabase.from("profiles").upsert({
-      id: user.id,
-      role: "company",
-      email: cleanEmail,
-    });
-    await supabase.from("companies").upsert({
-      user_id: user.id,
-      name: input.company_name.trim(),
-    });
-  } catch (err) {
-    console.warn("Company table sync note:", err);
-  }
-
-  loginUser({
-    id: user.id,
-    role: "company",
-    email: cleanEmail,
-    name: input.company_name,
-  });
-
-  return { confirmationRequired: false, user };
-}
-
-/**
- * Student login supporting Team Code, Email, or Name lookup.
+ * Student login using secure server-side authentication with rate limiting.
+ * The student's email is NEVER exposed or returned to unauthenticated clients.
  */
 export async function loginStudent(credentials: {
   email?: string;
@@ -234,117 +194,82 @@ export async function loginStudent(credentials: {
   name?: string;
   password: string;
 }) {
-  let loginEmail = credentials.email?.trim().toLowerCase();
+  const teamCodeOrEmail = (credentials.teamCode || credentials.email || "").trim();
+  const fullName = (credentials.name || "").trim();
 
-  // If email was not explicitly provided, look up by team code
-  if (!loginEmail && credentials.teamCode) {
-    const trimmedCode = credentials.teamCode.trim().toUpperCase();
-
-    // Check if user typed email into teamCode input
-    if (trimmedCode.includes("@")) {
-      loginEmail = trimmedCode.toLowerCase();
-    } else {
-      const { data: student } = await supabase
-        .from("students")
-        .select("user_id, full_name")
-        .ilike("team_code", trimmedCode)
-        .limit(1)
-        .maybeSingle();
-
-      if (student?.user_id) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("id", student.user_id)
-          .maybeSingle();
-
-        if (prof?.email) {
-          loginEmail = prof.email.toLowerCase();
-        }
-      }
-    }
-  }
-
-  // If still not found, check if studentName has an email
-  if (!loginEmail && credentials.name && credentials.name.includes("@")) {
-    loginEmail = credentials.name.trim().toLowerCase();
-  }
-
-  if (!loginEmail) {
-    throw new Error(
-      "No account matching this Team Code was found. Please check your credentials or enter your registered email."
-    );
-  }
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: loginEmail,
-    password: credentials.password,
+  // Execute server-side authenticated flow with rate-limiting & zero email leakage
+  const result = await loginStudentServerFn({
+    data: {
+      fullName,
+      teamCode: teamCodeOrEmail,
+      password: credentials.password,
+    },
   });
 
-  if (error) {
-    if (error.message.toLowerCase().includes("email not confirmed")) {
-      throw new Error(
-        "Email not verified yet. Please check your email inbox and click the confirmation link."
-      );
-    }
-    throw error;
+  if (!result?.session) {
+    throw new Error("Student authentication failed.");
   }
 
-  // Fetch or verify profile role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", data.user.id)
-    .maybeSingle();
-
-  if (profile && profile.role !== "student") {
-    await supabase.auth.signOut();
-    throw new Error("This account is not registered as a student.");
-  }
+  // Restore authenticated session in client Supabase instance
+  await supabase.auth.setSession({
+    access_token: result.session.access_token,
+    refresh_token: result.session.refresh_token,
+  });
 
   // Fetch student details for local store
   const { data: student } = await supabase
     .from("students")
     .select("full_name, team_code")
-    .eq("user_id", data.user.id)
+    .eq("user_id", result.user.id)
     .maybeSingle();
 
-  const meta = data.user.user_metadata;
+  const meta = result.user.user_metadata;
   loginUser({
-    id: data.user.id,
+    id: result.user.id,
     role: "student",
-    name: student?.full_name || (meta?.["full_name"] as string | undefined) || credentials.name,
-    teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || credentials.teamCode,
-    email: data.user.email ?? undefined,
+    name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName,
+    teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || teamCodeOrEmail,
+    email: result.user.email ?? undefined,
   });
 
-  return data;
+  return result;
 }
 
 /**
- * Company login with email and password.
+ * Administrator login accepting strictly username EQUINOXCIE.
+ * Authenticates against Supabase Auth via server function with rate limiting.
  */
-export async function loginCompany(email: string, password: string) {
-  const cleanEmail = email.trim().toLowerCase();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: cleanEmail,
-    password,
+export async function loginAdmin(credentials: { username: string; password: string }) {
+  const result = await loginAdminServerFn({
+    data: {
+      username: credentials.username,
+      password: credentials.password,
+    },
   });
 
-  if (error) throw error;
+  if (!result?.session) {
+    throw new Error("Administrator authentication failed.");
+  }
+
+  // Restore authenticated admin session in client Supabase instance
+  await supabase.auth.setSession({
+    access_token: result.session.access_token,
+    refresh_token: result.session.refresh_token,
+  });
 
   loginUser({
-    id: data.user.id,
-    role: "company",
-    email: data.user.email ?? undefined,
+    id: result.user.id,
+    role: "admin",
+    email: result.user.email ?? "equinoxcie@admin.equinox.internal",
+    name: "CIE Lead Administrator",
   });
 
-  return data;
+  return result;
 }
 
 /**
  * Fetch real internship listings from Supabase using public_opportunities view.
- * Enforces Recruiter Shield: company_id is omitted and company name is masked as Confidential.
+ * Recruiter Shield: company_id is omitted and company name is masked as Confidential.
  */
 export async function getOpportunities(): Promise<Opportunity[]> {
   const { data, error } = await supabase
@@ -387,29 +312,61 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
 }
 
 /**
- * Submit an internship application for the currently authenticated student.
+ * Submit a single internship application for the currently authenticated student.
+ * Supports reusing the student's profile resume or uploading a custom resume for this specific role.
  */
-export async function submitApplication(internshipId: string) {
+export async function submitApplication(
+  internshipId: string,
+  options?: { customResume?: File | undefined }
+) {
+  const batchRes = await submitBatchApplications({
+    internshipIds: [internshipId],
+    customResume: options?.customResume,
+  });
+
+  if (batchRes.duplicateCount > 0 && batchRes.appliedCount === 0) {
+    return { alreadyApplied: true };
+  }
+
+  return { alreadyApplied: false };
+}
+
+/**
+ * Multi-internship application submission.
+ * Creates a separate application record for each selected internship.
+ * Prevents duplicate applications for the same internship by checking existing submissions.
+ * Reuses profile resume OR uploads and attaches a custom tailored resume.
+ */
+export async function submitBatchApplications(
+  input: BatchApplicationInput
+): Promise<BatchApplicationResult> {
+  if (!input.internshipIds || input.internshipIds.length === 0) {
+    throw new Error("No internships selected.");
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    throw new Error("Please log in before submitting an application.");
+    throw new Error("Please log in before submitting applications.");
   }
 
-  // 1. Resolve student ID
+  // 1. Resolve student ID and existing profile resume
   let studentId: string | null = null;
+  let profileResumeUrl: string | null = null;
+
   const { data: student } = await supabase
     .from("students")
-    .select("id")
+    .select("id, resume_url")
     .eq("user_id", user.id)
     .maybeSingle();
 
   if (student?.id) {
     studentId = student.id;
+    profileResumeUrl = student.resume_url;
   } else {
-    // If student record was not created during signup, create it now
+    // If student profile row missing, create it from auth metadata
     const meta = user.user_metadata;
     const { data: newStudent, error: createError } = await supabase
       .from("students")
@@ -420,38 +377,75 @@ export async function submitApplication(internshipId: string) {
         team_code: ((meta?.["team_code"] as string | undefined) || "EQX-APP").toUpperCase(),
         mobile: (meta?.["mobile"] as string | undefined) || "N/A",
       })
-      .select("id")
+      .select("id, resume_url")
       .single();
 
     if (createError) throw createError;
     studentId = newStudent.id;
+    profileResumeUrl = newStudent.resume_url;
   }
 
-  // 2. Prevent duplicate application
-  const { data: existing } = await supabase
+  // 2. Upload custom resume if provided. NULL explicitly denotes reusing student profile resume.
+  let resumePath: string | null = null;
+  if (input.customResume) {
+    resumePath = await uploadResumeFile(user.id, input.customResume);
+  }
+
+  // 3. Check for existing applications among selected IDs to prevent duplicates
+  const { data: existingApplications, error: checkError } = await supabase
     .from("applications")
-    .select("id, status")
-    .eq("internship_id", internshipId)
+    .select("internship_id")
     .eq("student_id", studentId)
-    .maybeSingle();
+    .in("internship_id", input.internshipIds);
 
-  if (existing) {
-    return { alreadyApplied: true, application: existing };
+  if (checkError) {
+    console.warn("Duplicate check note:", checkError.message);
   }
 
-  // 3. Create application
-  const { data, error } = await supabase
-    .from("applications")
-    .insert({
-      internship_id: internshipId,
-      student_id: studentId,
-      status: "submitted",
-    })
-    .select()
-    .single();
+  const alreadyAppliedIds = new Set(
+    (existingApplications || []).map((app) => app.internship_id)
+  );
 
-  if (error) throw error;
-  return { alreadyApplied: false, application: data };
+  const newInternshipIds = input.internshipIds.filter(
+    (id) => !alreadyAppliedIds.has(id)
+  );
+
+  if (newInternshipIds.length === 0) {
+    return {
+      totalRequested: input.internshipIds.length,
+      appliedCount: 0,
+      duplicateCount: input.internshipIds.length,
+      alreadyAppliedIds: Array.from(alreadyAppliedIds),
+      successfulIds: [],
+    };
+  }
+
+  // 4. Insert one separate application record per selected internship
+  const rowsToInsert = newInternshipIds.map((internshipId) => ({
+    internship_id: internshipId,
+    student_id: studentId,
+    status: "submitted",
+    resume_url: resumePath,
+  }));
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("applications")
+    .insert(rowsToInsert)
+    .select("id, internship_id");
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  const successfulIds = (inserted || []).map((row) => row.internship_id);
+
+  return {
+    totalRequested: input.internshipIds.length,
+    appliedCount: successfulIds.length,
+    duplicateCount: alreadyAppliedIds.size,
+    alreadyAppliedIds: Array.from(alreadyAppliedIds),
+    successfulIds,
+  };
 }
 
 /**
@@ -478,6 +472,7 @@ export async function getStudentApplications(): Promise<StudentApplication[]> {
       id,
       internship_id,
       status,
+      resume_url,
       created_at,
       internship:internships (
         id,
