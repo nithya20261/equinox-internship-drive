@@ -19,6 +19,8 @@ import {
   RefreshCw,
   Sparkles,
   X,
+  Download,
+  FileText,
 } from "lucide-react";
 import { Container } from "@/components/site/primitives";
 import { useAuth } from "@/lib/auth";
@@ -29,6 +31,9 @@ import {
   adminGetConfirmedStudents,
   adminAddConfirmedStudent,
   adminGetApplications,
+  adminUpdateApplicationStatus,
+  adminGetResumeDownloadUrl,
+  adminExportApplicationsCsv,
 } from "@/lib/api";
 import { CONFIRMED_STUDENTS_LIST } from "@/data/confirmed-students";
 import { INTERNSHIP_CATEGORIES } from "@/data/site";
@@ -104,6 +109,10 @@ function AdminConsole() {
   const [applications, setApplications] = useState<any[]>([]);
   const [loadingApps, setLoadingApps] = useState(true);
   const [appSearch, setAppSearch] = useState("");
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [appOperationMsg, setAppOperationMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const isAuthorized = isAdmin && user?.role === "admin";
 
@@ -356,6 +365,70 @@ function AdminConsole() {
       setCnfError(err?.message || "Failed to add CNF student access.");
     } finally {
       setIsSavingCnf(false);
+    }
+  };
+
+  // --- Applications Handlers ---
+  const handleStatusChange = async (applicationId: string, newStatus: string) => {
+    try {
+      setUpdatingStatusId(applicationId);
+      setAppOperationMsg(null);
+      await adminUpdateApplicationStatus(applicationId, newStatus);
+      setApplications((prev) =>
+        prev.map((app) => (app.id === applicationId ? { ...app, status: newStatus } : app))
+      );
+      setAppOperationMsg({
+        type: "success",
+        text: `Application status updated to "${newStatus.replace(/_/g, " ").toUpperCase()}".`,
+      });
+      setTimeout(() => setAppOperationMsg(null), 3500);
+    } catch (err: any) {
+      setAppOperationMsg({
+        type: "error",
+        text: err?.message || "Failed to update application status.",
+      });
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
+
+  const handleViewResume = async (appId: string, resumeUrl?: string | null) => {
+    if (!resumeUrl) {
+      alert("No resume file path attached to this application.");
+      return;
+    }
+    try {
+      setDownloadingResumeId(appId);
+      const signedUrl = await adminGetResumeDownloadUrl(resumeUrl);
+      if (signedUrl) {
+        window.open(signedUrl, "_blank", "noopener,noreferrer");
+      } else {
+        alert("Resume file could not be accessed or link has expired.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to generate resume download link.");
+    } finally {
+      setDownloadingResumeId(null);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      setIsExportingCsv(true);
+      setAppOperationMsg(null);
+      const res = await adminExportApplicationsCsv();
+      setAppOperationMsg({
+        type: "success",
+        text: `Exported ${res.count} candidate application(s) to CSV file.`,
+      });
+      setTimeout(() => setAppOperationMsg(null), 4000);
+    } catch (err: any) {
+      setAppOperationMsg({
+        type: "error",
+        text: err?.message || "Failed to export applications to CSV.",
+      });
+    } finally {
+      setIsExportingCsv(false);
     }
   };
 
@@ -687,22 +760,61 @@ function AdminConsole() {
       empty: "Candidate applications submitted for internship roles will appear here.",
       content: (
         <div className="space-y-6">
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-white/20 bg-[#151515] p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-white/20 bg-[#151515] p-5 shadow-sm">
             <div>
               <h3 className="font-mono text-sm font-bold text-[#F7F2F6] uppercase tracking-wider">
                 Candidate Applications Live Feed
               </h3>
               <p className="mt-1 text-xs text-[#F7F2F6]/60">
-                Review submitted student applications with verified CNF numbers and resume uploads.
+                Review, update statuses, securely view resumes, and export candidate data.
               </p>
             </div>
-            <button
-              onClick={fetchApplications}
-              className="btn btn-line h-8 px-3 text-xs font-mono flex items-center gap-1.5"
-            >
-              <RefreshCw size={13} /> Refresh
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={fetchApplications}
+                className="btn btn-line h-9 px-3 text-xs font-mono inline-flex items-center gap-1.5"
+              >
+                <RefreshCw size={13} /> Refresh
+              </button>
+              <button
+                type="button"
+                disabled={isExportingCsv || applications.length === 0}
+                onClick={handleExportCsv}
+                className="btn btn-signal h-9 px-4 text-xs font-mono inline-flex items-center gap-2"
+              >
+                {isExportingCsv ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    <span>Export CSV ({filteredApps.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+
+          {/* Operation notification banner */}
+          {appOperationMsg && (
+            <div
+              className={`flex items-center gap-2 rounded-xl border p-3.5 font-mono text-xs ${
+                appOperationMsg.type === "success"
+                  ? "border-[#33FF67]/40 bg-[#33FF67]/10 text-[#33FF67]"
+                  : "border-red-500/40 bg-red-500/10 text-red-400"
+              }`}
+            >
+              {appOperationMsg.type === "success" ? (
+                <CheckCircle2 size={15} className="shrink-0" />
+              ) : (
+                <AlertCircle size={15} className="shrink-0" />
+              )}
+              <span>{appOperationMsg.text}</span>
+            </div>
+          )}
 
           {/* Search bar */}
           <div className="relative">
@@ -711,7 +823,7 @@ function AdminConsole() {
               type="text"
               value={appSearch}
               onChange={(e) => setAppSearch(e.target.value)}
-              placeholder="Search by candidate name, CNF, or applied role..."
+              placeholder="Search by candidate name, CNF, email, or applied role..."
               className="w-full rounded-xl border border-white/20 bg-[#121212] py-2.5 pl-10 pr-4 font-mono text-xs text-white placeholder:text-white/40 outline-none focus:border-[#7484FE]"
             />
           </div>
@@ -721,7 +833,7 @@ function AdminConsole() {
               <Loader2 className="h-8 w-8 animate-spin text-[#33FF67]" />
             </div>
           ) : filteredApps.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/20 p-12 text-center text-white/50 text-xs">
+            <div className="rounded-xl border border-dashed border-white/20 p-12 text-center text-white/50 text-xs font-mono">
               No candidate applications matching your search criteria.
             </div>
           ) : (
@@ -729,52 +841,147 @@ function AdminConsole() {
               {filteredApps.map((app) => (
                 <div
                   key={app.id}
-                  className="rounded-xl border border-white/15 bg-[#181818] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  className="rounded-xl border border-white/15 bg-[#181818] p-5 flex flex-col md:flex-row md:items-start justify-between gap-5 hover:border-white/25 transition-colors"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono font-bold text-xs text-[#33FF67]">
                         {app.student?.team_code || "CNF"}
                       </span>
                       <strong className="text-white font-sans text-sm">
                         {app.student?.full_name || "Applicant"}
                       </strong>
-                      <span className="rounded bg-white/10 px-2 py-0.5 font-mono text-[10px] text-white/70">
-                        {app.status}
-                      </span>
+                      {app.student?.email && (
+                        <span className="font-mono text-[11px] text-white/50">
+                          ({app.student.email})
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-[#7484FE] font-mono">
                       Applied for: <strong>{app.internship?.role || "Internship Role"}</strong> ({app.internship?.domain || "General"})
                     </p>
 
-                    <p className="text-[11px] text-white/60 font-sans">
-                      College: {app.student?.college || "MLRIT"} · Mobile: {app.student?.mobile || "N/A"}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/70 font-sans">
+                      <span>College: <strong>{app.student?.college || "MLRIT"}</strong></span>
+                      {app.student?.course_branch && (
+                        <>
+                          <span>•</span>
+                          <span>Branch: <strong>{app.student.course_branch}</strong></span>
+                        </>
+                      )}
+                      {app.student?.graduation_year && (
+                        <>
+                          <span>•</span>
+                          <span>Grad Year: <strong>{app.student.graduation_year}</strong></span>
+                        </>
+                      )}
+                      <span>•</span>
+                      <span>Mobile: <strong>{app.student?.mobile || "N/A"}</strong></span>
+                      {app.availability && (
+                        <>
+                          <span>•</span>
+                          <span className="text-[#33FF67]">Availability: {app.availability}</span>
+                        </>
+                      )}
+                    </div>
 
                     {app.skills && (
-                      <p className="text-[11px] text-white/50 font-mono">
-                        Skills: {app.skills}
+                      <p className="text-[11px] text-white/60 font-mono mt-1">
+                        Skills: <span className="text-white/80">{app.skills}</span>
+                      </p>
+                    )}
+
+                    {app.created_at && (
+                      <p className="text-[10px] text-white/40 font-mono">
+                        Submitted: {new Date(app.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    {app.video_url && (
-                      <a
-                        href={app.video_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1"
+                  <div className="flex flex-col sm:items-end gap-3 shrink-0">
+                    {/* Status Dropdown Selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] uppercase text-white/50">Status:</span>
+                      <select
+                        aria-label="Update Application Status"
+                        value={app.status || "submitted"}
+                        disabled={updatingStatusId === app.id}
+                        onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                        className={`rounded-lg border px-3 py-1 font-mono text-xs font-bold uppercase outline-none transition-colors cursor-pointer ${
+                          app.status === "selected"
+                            ? "border-[#33FF67] bg-[#33FF67]/15 text-[#33FF67]"
+                            : app.status === "shortlisted"
+                            ? "border-[#7484FE] bg-[#7484FE]/15 text-[#7484FE]"
+                            : app.status === "interview_scheduled"
+                            ? "border-amber-400 bg-amber-400/15 text-amber-300"
+                            : app.status === "under_review"
+                            ? "border-sky-400 bg-sky-400/15 text-sky-300"
+                            : app.status === "rejected"
+                            ? "border-red-500/50 bg-red-500/10 text-red-400"
+                            : "border-white/20 bg-[#121212] text-white/80"
+                        }`}
                       >
-                        Video <ExternalLink size={12} />
-                      </a>
-                    )}
-                    {app.resume_url && (
-                      <span className="font-mono text-xs text-[#33FF67] inline-flex items-center gap-1">
-                        <FileCheck size={14} /> Resume Uploaded
-                      </span>
-                    )}
+                        <option value="submitted" className="bg-[#181818] text-white">Submitted</option>
+                        <option value="under_review" className="bg-[#181818] text-sky-300">Under Review</option>
+                        <option value="shortlisted" className="bg-[#181818] text-[#7484FE]">Shortlisted</option>
+                        <option value="interview_scheduled" className="bg-[#181818] text-amber-300">Interview Scheduled</option>
+                        <option value="selected" className="bg-[#181818] text-[#33FF67]">Selected</option>
+                        <option value="rejected" className="bg-[#181818] text-red-400">Rejected</option>
+                      </select>
+                      {updatingStatusId === app.id && (
+                        <Loader2 size={13} className="animate-spin text-[#33FF67]" />
+                      )}
+                    </div>
+
+                    {/* Action Links & Buttons */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {app.video_url && (
+                        <a
+                          href={app.video_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1 hover:border-[#7484FE] hover:text-[#7484FE]"
+                        >
+                          Video <ExternalLink size={12} />
+                        </a>
+                      )}
+
+                      {app.portfolio_url && (
+                        <a
+                          href={app.portfolio_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1"
+                        >
+                          Portfolio <ExternalLink size={12} />
+                        </a>
+                      )}
+
+                      {app.resume_url ? (
+                        <button
+                          type="button"
+                          disabled={downloadingResumeId === app.id}
+                          onClick={() => handleViewResume(app.id, app.resume_url)}
+                          className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1.5 hover:border-[#33FF67] hover:text-[#33FF67]"
+                        >
+                          {downloadingResumeId === app.id ? (
+                            <>
+                              <Loader2 size={12} className="animate-spin text-[#33FF67]" />
+                              <span>Opening...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileText size={12} className="text-[#33FF67]" />
+                              <span>View Resume</span>
+                              <ExternalLink size={11} className="opacity-60" />
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="font-mono text-[11px] text-white/30">No Resume</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

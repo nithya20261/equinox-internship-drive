@@ -6,6 +6,10 @@ export interface AuthUser {
   id?: string | undefined;
   role: "student" | "admin";
   name?: string | undefined;
+  fullName?: string | undefined;
+  college?: string | undefined;
+  branch?: string | undefined;
+  mobile?: string | undefined;
   teamCode?: string | undefined;
   email?: string | undefined;
 }
@@ -66,11 +70,21 @@ export function useAuth() {
           return;
         }
 
+        const cleanDisplayName =
+          res.fullName && !res.fullName.toLowerCase().startsWith("cnf") && !res.fullName.includes("XXX")
+            ? res.fullName
+            : (session.user.user_metadata?.["full_name"] || session.user.email?.split("@")[0]);
+
         const authUser: AuthUser = {
           id: session.user.id,
           role: res.role,
           email: session.user.email ?? undefined,
-          name: session.user.email?.split("@")[0],
+          name: cleanDisplayName,
+          fullName: res.fullName || cleanDisplayName,
+          college: res.college ?? undefined,
+          branch: res.branch ?? undefined,
+          mobile: res.mobile ?? undefined,
+          teamCode: res.teamCode ?? undefined,
         };
 
         loginUser(authUser);
@@ -99,11 +113,21 @@ export function useAuth() {
             return;
           }
 
+          const cleanDisplayName =
+            res.fullName && !res.fullName.toLowerCase().startsWith("cnf") && !res.fullName.includes("XXX")
+              ? res.fullName
+              : (session.user.user_metadata?.["full_name"] || session.user.email?.split("@")[0]);
+
           const authUser: AuthUser = {
             id: session.user.id,
             role: res.role,
             email: session.user.email ?? undefined,
-            name: session.user.email?.split("@")[0],
+            name: cleanDisplayName,
+            fullName: res.fullName || cleanDisplayName,
+            college: res.college ?? undefined,
+            branch: res.branch ?? undefined,
+            mobile: res.mobile ?? undefined,
+            teamCode: res.teamCode ?? undefined,
           };
 
           loginUser(authUser);

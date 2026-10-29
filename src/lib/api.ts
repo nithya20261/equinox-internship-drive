@@ -11,6 +11,11 @@ import {
   adminAddConfirmedStudentServerFn,
   adminGetConfirmedStudentsServerFn,
   adminGetApplicationsServerFn,
+  adminUpdateApplicationStatusServerFn,
+  adminGetResumeDownloadUrlServerFn,
+  adminExportApplicationsCsvServerFn,
+  studentGetApplicationsServerFn,
+  type ApplicationStatus,
 } from "./server-auth";
 
 const RESUME_BUCKET = "resumes";
@@ -111,15 +116,33 @@ export async function uploadResumeFile(userId: string, file: File): Promise<stri
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const resumePath = `${userId}/${Date.now()}-${safeName}`;
 
-  const { error: uploadError } = await supabase.storage
+  // 30-second timeout guard to prevent infinite browser hanging on slow/unstable networks
+  const uploadPromise = supabase.storage
     .from(RESUME_BUCKET)
     .upload(resumePath, file, {
       cacheControl: "3600",
-      upsert: false,
+      upsert: true,
     });
 
-  if (uploadError) {
-    throw new Error(`Failed to upload resume: ${uploadError.message}`);
+  const timeoutPromise = new Promise<{ error: Error }>((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            "Resume upload timed out (network took longer than 30s). Please check your internet connection or use a smaller file."
+          )
+        ),
+      30000
+    )
+  );
+
+  const res = (await Promise.race([uploadPromise, timeoutPromise])) as {
+    data: any;
+    error: any;
+  };
+
+  if (res.error) {
+    throw new Error(`Failed to upload resume: ${res.error.message}`);
   }
 
   return resumePath;
@@ -428,12 +451,90 @@ export async function adminGetApplications() {
 }
 
 /**
+ * Admin action to update candidate application status.
+ */
+export async function adminUpdateApplicationStatus(applicationId: string, status: string) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminUpdateApplicationStatusServerFn({
+    data: {
+      adminToken: session.access_token,
+      applicationId,
+      status,
+    },
+  });
+}
+
+/**
+ * Admin action to securely generate a temporary download URL for candidate resume.
+ */
+export async function adminGetResumeDownloadUrl(resumePath: string): Promise<string> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  const result = await adminGetResumeDownloadUrlServerFn({
+    data: {
+      adminToken: session.access_token,
+      resumePath,
+    },
+  });
+
+  return result.signedUrl;
+}
+
+/**
+ * Admin action to export all candidate applications to CSV and trigger browser download.
+ */
+export async function adminExportApplicationsCsv(): Promise<{ count: number; filename: string }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  const result = await adminExportApplicationsCsvServerFn({
+    data: { adminToken: session.access_token },
+  });
+
+  if (typeof window !== "undefined") {
+    const blob = new Blob([result.csvContent], { type: "text/csv;charset=utf-8;" });
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.setAttribute("download", result.filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  return {
+    count: result.count,
+    filename: result.filename,
+  };
+}
+
+/**
  * Equinox Career Connect 10-field student application submission.
  * Validates the 10 fields, uploads the resume to the private storage bucket,
  * and records the application with Google Drive self-introduction video link in Supabase.
  */
 export async function submitStudentApplication(
-  form: StudentApplicationFormData
+  form: StudentApplicationFormData,
+  onStageChange?: (stage: "uploading" | "saving") => void
 ): Promise<{ alreadyApplied: boolean; success: boolean }> {
   if (!form.fullName.trim()) throw new Error("Full Name is required.");
   if (!form.contactNumber.trim()) throw new Error("Contact Number is required.");
@@ -456,13 +557,15 @@ export async function submitStudentApplication(
   } = await supabase.auth.getSession();
 
   if (!session?.access_token || !session?.user) {
-    throw new Error("Please log in to your student account before submitting the application.");
+    throw new Error("You must be logged in as an authorized student to submit an application. Please log in first.");
   }
 
   // 1. Upload resume to private 'resumes' storage bucket
+  onStageChange?.("uploading");
   const resumePath = await uploadResumeFile(session.user.id, form.resumeFile);
 
   // 2. Submit application record with video link and student data
+  onStageChange?.("saving");
   const result = await studentSubmitApplicationServerFn({
     data: {
       studentToken: session.access_token,
@@ -547,8 +650,27 @@ export async function submitBatchApplications(
 
 /**
  * Get all applications submitted by the current student.
+ * Uses trusted server function to bypass RLS variations and return true application records and count.
  */
 export async function getStudentApplications(): Promise<StudentApplication[]> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (session?.access_token) {
+    try {
+      const res = await studentGetApplicationsServerFn({
+        data: { studentToken: session.access_token },
+      });
+      if (res && Array.isArray(res.applications)) {
+        return res.applications as StudentApplication[];
+      }
+    } catch (serverErr) {
+      console.warn("ServerFn student applications retrieval fallback:", serverErr);
+    }
+  }
+
+  // Fallback: direct client query
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -561,7 +683,8 @@ export async function getStudentApplications(): Promise<StudentApplication[]> {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!student?.id) return [];
+  const matchIds = [user.id];
+  if (student?.id) matchIds.push(student.id);
 
   const { data, error } = await supabase
     .from("applications")
@@ -570,6 +693,10 @@ export async function getStudentApplications(): Promise<StudentApplication[]> {
       internship_id,
       status,
       resume_url,
+      video_url,
+      skills,
+      portfolio_url,
+      availability,
       created_at,
       internship:internships (
         id,
@@ -580,11 +707,11 @@ export async function getStudentApplications(): Promise<StudentApplication[]> {
         duration
       )
     `)
-    .eq("student_id", user.id)
+    .in("student_id", matchIds)
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.warn("Error fetching applications:", error.message);
+    console.warn("Direct query error fetching applications:", error.message);
     return [];
   }
 
@@ -625,9 +752,20 @@ export async function getStudentProfile() {
 export async function getResumeDownloadUrl(resumePath: string): Promise<string | null> {
   if (!resumePath) return null;
   try {
+    let cleanPath = resumePath.trim();
+    if (cleanPath.startsWith("http://") || cleanPath.startsWith("https://")) {
+      const idx = cleanPath.indexOf("/resumes/");
+      if (idx !== -1) {
+        cleanPath = cleanPath.substring(idx + "/resumes/".length);
+      }
+    }
+    if (cleanPath.startsWith("resumes/")) {
+      cleanPath = cleanPath.replace(/^resumes\//, "");
+    }
+
     const { data, error } = await supabase.storage
       .from(RESUME_BUCKET)
-      .createSignedUrl(resumePath, 60); // 60 seconds TTL
+      .createSignedUrl(cleanPath, 60); // 60 seconds TTL
 
     if (error) {
       console.warn("Could not generate signed URL:", error.message);

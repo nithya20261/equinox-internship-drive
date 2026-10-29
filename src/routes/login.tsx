@@ -56,10 +56,7 @@ function Login() {
   };
 
   return (
-    <AuthLayout
-      title={<>Welcome<br />back.</>}
-      aside="Pick up where you left off — access your profile, track applications and view results."
-    >
+    <AuthLayout title="Welcome">
       <h2 className="headline text-3xl">Log in</h2>
       <div className="mt-6">
         <RoleTabs

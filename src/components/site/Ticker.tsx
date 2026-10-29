@@ -1,7 +1,7 @@
 export function Ticker() {
   const words = [
     "THE EQUINOX 2.0",
-    "SUB-EVENT 06 · INTERNSHIP DRIVE",
+    "EQUINOX INTERNSHIP DRIVE",
     "30 & 31 OCTOBER 2026",
     "MLRIT HYDERABAD",
     "# WHERE PASSION MEETS PERSEVERANCE",

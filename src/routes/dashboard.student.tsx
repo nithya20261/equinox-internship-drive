@@ -104,15 +104,53 @@ function StudentDashboard() {
       {/* Header Bar */}
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-foreground pb-6">
         <div>
-          <p className="eyebrow text-[#33FF67]">
-            Student Account · <span className="text-[#F7F2F6]">{teamCode}</span>
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="eyebrow text-[#33FF67]">
+              Student Account · <span className="text-[#F7F2F6]">{teamCode}</span>
+            </p>
+            {!isLoadingData && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-[#33FF67]/40 bg-[#33FF67]/15 font-mono text-xs font-bold text-[#33FF67]">
+                <Briefcase className="h-3.5 w-3.5" />
+                {applications.length} {applications.length === 1 ? "Role Applied" : "Roles Applied"}
+              </span>
+            )}
+          </div>
           <h1 className="display mt-2 text-4xl md:text-6xl">My Applications</h1>
         </div>
         <Link to="/internships" className="btn btn-signal h-11 px-5 text-xs font-mono">
           Explore More Roles <ArrowRight className="ml-2 h-4 w-4" />
         </Link>
       </div>
+
+      {/* Metric Cards Row */}
+      {!isLoadingData && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+          <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-4 rounded-xl">
+            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider block">Total Applied</span>
+            <span className="font-mono text-2xl md:text-3xl font-bold text-[#33FF67] mt-1 block">
+              {applications.length}
+            </span>
+          </div>
+          <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-4 rounded-xl">
+            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider block">Under Review</span>
+            <span className="font-mono text-2xl md:text-3xl font-bold text-sky-400 mt-1 block">
+              {applications.filter((a) => (a.status || "submitted") === "under_review" || a.status === "submitted").length}
+            </span>
+          </div>
+          <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-4 rounded-xl">
+            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider block">Shortlisted</span>
+            <span className="font-mono text-2xl md:text-3xl font-bold text-[#7484FE] mt-1 block">
+              {applications.filter((a) => ["shortlisted", "interview_scheduled"].includes(a.status)).length}
+            </span>
+          </div>
+          <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-4 rounded-xl">
+            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider block">Selected</span>
+            <span className="font-mono text-2xl md:text-3xl font-bold text-emerald-400 mt-1 block">
+              {applications.filter((a) => a.status === "selected").length}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Applications Content */}
       <div className="mt-8">
@@ -122,11 +160,14 @@ function StudentDashboard() {
             <span className="ml-3 font-mono text-sm">Loading applications...</span>
           </div>
         ) : applications.length === 0 ? (
-          <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-10 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center border border-[#2A2A2A] bg-black text-muted-foreground">
+          <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-10 text-center rounded-xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center border border-[#2A2A2A] bg-black text-muted-foreground rounded-lg">
               <Briefcase className="h-6 w-6" />
             </div>
-            <h2 className="headline mt-4 text-2xl text-[#F7F2F6]">No Roles Applied Yet</h2>
+            <div className="mt-4 font-mono text-xs text-[#33FF67] uppercase tracking-wider font-bold">
+              Total Roles Applied: 0
+            </div>
+            <h2 className="headline mt-2 text-2xl text-[#F7F2F6]">No Roles Applied Yet</h2>
             <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
               Select roles from the opportunities board and upload your resume to apply.
             </p>
@@ -161,9 +202,23 @@ function StudentDashboard() {
 
                   <div className="flex flex-col sm:items-end gap-3">
                     {/* Status Badge */}
-                    <div className="inline-flex items-center gap-1.5 border border-[#33FF67] bg-[#33FF67]/10 px-4 py-1.5 font-mono text-xs font-bold uppercase text-[#33FF67]">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>UPLOADED</span>
+                    <div
+                      className={`inline-flex items-center gap-1.5 border px-3.5 py-1.5 font-mono text-xs font-bold uppercase ${
+                        app.status === "selected"
+                          ? "border-[#33FF67] bg-[#33FF67]/15 text-[#33FF67]"
+                          : app.status === "shortlisted"
+                          ? "border-[#7484FE] bg-[#7484FE]/15 text-[#7484FE]"
+                          : app.status === "interview_scheduled"
+                          ? "border-amber-400 bg-amber-400/15 text-amber-300"
+                          : app.status === "under_review"
+                          ? "border-sky-400 bg-sky-400/15 text-sky-300"
+                          : app.status === "rejected"
+                          ? "border-red-500/50 bg-red-500/15 text-red-400"
+                          : "border-[#33FF67] bg-[#33FF67]/10 text-[#33FF67]"
+                      }`}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>{(app.status || "submitted").replace(/_/g, " ")}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">

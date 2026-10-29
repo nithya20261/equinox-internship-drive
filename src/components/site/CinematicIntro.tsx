@@ -74,16 +74,12 @@ export function CinematicIntro({ onComplete }: CinematicIntroProps) {
           </span>
         </div>
 
-        {/* Phase 3: Sub-Event 06 - INTERNSHIP DRIVE Reveal */}
+        {/* Phase 3: INTERNSHIP DRIVE Reveal */}
         <div
           className={`mt-6 flex flex-col items-center transition-all duration-600 ${
             phase >= 3 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
-          <div className="mb-3 inline-block border border-white/20 bg-[#2A2A2A] px-3.5 py-1 font-mono text-xs font-bold uppercase tracking-widest text-[#7484FE] shadow-[2px_2px_0px_#7484FE]">
-            Official Sub-Event · Page 06
-          </div>
-
           <h1 className="font-display-title text-4xl sm:text-6xl md:text-7xl font-black uppercase tracking-tight">
             <span className="mr-2 sm:mr-3 inline-block bg-[#F7F2F6] px-3.5 py-1 text-[#2A2A2A] shadow-[4px_4px_0px_#2A2A2A]">
               INTERNSHIP

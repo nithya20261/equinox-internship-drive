@@ -9,36 +9,22 @@ export function AuthLayout({
   children,
 }: {
   title: ReactNode;
-  aside: ReactNode;
+  aside?: ReactNode | undefined;
   children: ReactNode;
 }) {
   return (
     <Container className="py-10 sm:py-14">
       <div className="grid min-h-[75vh] rounded-3xl border-2 border-white/20 overflow-hidden shadow-[6px_6px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs lg:grid-cols-2">
-        <div className="flex flex-col justify-between brochure-grid-dense bg-[#151515] p-8 text-[#F7F2F6] md:p-12 relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
-          <div className="absolute right-4 top-4 opacity-25 pointer-events-none">
-            <WireframeGlobe size={180} strokeColor="#F7F2F6" accentColor="#33FF67" speed={0.005} />
-          </div>
-
+        <div className="flex flex-col justify-center brochure-grid-dense bg-[#151515] p-8 text-[#F7F2F6] md:p-12 relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
           <div className="relative z-10">
-            <div className="flex items-center gap-2">
-              <span className="pulse-dot h-2 w-2 rounded-full bg-[#33FF67]" />
-              <p className="font-mono text-xs font-bold tracking-widest text-[#7484FE] uppercase">
-                {EVENT.name} · Sub-Event 06
-              </p>
-            </div>
-            <div className="mt-10 sm:mt-14">
-              <h1 className="font-display-title font-black text-4xl sm:text-5xl md:text-6xl uppercase tracking-tight text-[#F7F2F6]">
-                {title}
-              </h1>
+            <h1 className="font-display-title font-black text-5xl sm:text-6xl md:text-7xl uppercase tracking-tight text-[#F7F2F6]">
+              {title}
+            </h1>
+            {aside && (
               <div className="mt-5 max-w-sm font-sans text-sm text-white/70 leading-relaxed">
                 {aside}
               </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 pt-10 font-mono text-xs text-white/50">
-            {EVENT.dates} · MLRIT {EVENT.city}
+            )}
           </div>
         </div>
 
