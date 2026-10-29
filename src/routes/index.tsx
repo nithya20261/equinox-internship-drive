@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowRight, Shield, Lock, RotateCcw } from "lucide-react";
-import { DRIVE_STATS, EVENT } from "@/data/site";
-import { Container, Eyebrow, Reveal, SectionHead, TbaBadge } from "@/components/site/primitives";
+import { ArrowRight, Shield, Lock } from "lucide-react";
+import { Container, Eyebrow, Reveal, SectionHead } from "@/components/site/primitives";
 import { Journey, ListingAnatomy, OpportunitySlot } from "@/components/site/blocks";
 import { CinematicIntro } from "@/components/site/CinematicIntro";
 import { useAuth } from "@/lib/auth";
@@ -29,11 +28,6 @@ function Index() {
     setShowIntro(false);
   };
 
-  const handleReplayIntro = () => {
-    window.scrollTo(0, 0);
-    setShowIntro(true);
-  };
-
   return (
     <div className="relative min-h-screen">
       {showIntro && <CinematicIntro onComplete={handleIntroComplete} />}
@@ -44,12 +38,10 @@ function Index() {
             : "opacity-100"
         }`}
       >
-        <Hero onReplayIntro={handleReplayIntro} />
+        <Hero />
         <WhatIs />
         <IdentityShield />
-        <Why />
         <Opportunities />
-        <Companies />
         <HowItWorks />
         <Scale />
         <AboutEquinox />
@@ -60,7 +52,7 @@ function Index() {
   );
 }
 
-function Hero({ onReplayIntro }: { onReplayIntro: () => void }) {
+function Hero() {
   const { isLoggedIn } = useAuth();
 
   return (
@@ -75,12 +67,9 @@ function Hero({ onReplayIntro }: { onReplayIntro: () => void }) {
             <span className="pulse-dot h-2 w-2 rounded-full bg-[#33FF67]" aria-hidden />
             <span className="font-mono text-xs uppercase tracking-wider font-bold text-[#7484FE]">CIE @ MLRIT PRESENTS</span>
           </div>
-          <button
-            onClick={onReplayIntro}
-            className="flex items-center gap-1.5 font-sans text-xs text-[#F7F2F6]/70 hover:text-[#33FF67] transition-colors"
-          >
-            <RotateCcw className="h-3.5 w-3.5" /> Replay Cinematic Intro
-          </button>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-white/50">
+            OFFICIAL SUMMIT DRIVE
+          </span>
         </div>
 
         {/* Hero Branding with Official Equinox Logo */}
@@ -116,13 +105,9 @@ function Hero({ onReplayIntro }: { onReplayIntro: () => void }) {
               <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold">
                 Explore Opportunities <ArrowRight className="h-4 w-4" />
               </Link>
-              {!isLoggedIn ? (
-                <Link to="/register" className="btn btn-line h-11 px-6 text-sm font-semibold">
-                  Register as Candidate
-                </Link>
-              ) : (
-                <Link to="/dashboard/student" className="btn btn-line h-11 px-6 text-sm font-semibold">
-                  Open Student Dashboard
+              {!isLoggedIn && (
+                <Link to="/login" className="btn btn-line h-11 px-6 text-sm font-semibold">
+                  Log in
                 </Link>
               )}
             </div>
@@ -133,7 +118,7 @@ function Hero({ onReplayIntro }: { onReplayIntro: () => void }) {
               {[
                 ["Dates", "30–31 October"],
                 ["Venue", "MLRIT · Hyderabad"],
-                ["Target", "2000+ Students"],
+                ["Format", "On-Campus Summit"],
                 ["Host", "CIE @ MLRIT"],
               ].map(([k, v]) => (
                 <div key={k} className="border-b border-white/20 py-3.5 pr-4">
@@ -217,50 +202,13 @@ function WhatIs() {
   );
 }
 
-function Why() {
-  return (
-    <section className="bg-[#151515] py-20 border-y border-white/20 brochure-grid-dense">
-      <Container>
-        <div className="grid gap-6 border-t border-white/20 pt-6 md:grid-cols-12 md:items-start">
-          <div className="md:col-span-3">
-            <Eyebrow index="02" className="text-[#7484FE]">Key Metrics</Eyebrow>
-          </div>
-          <h2 className="font-display-title text-3xl sm:text-4xl md:text-5xl md:col-span-9 uppercase text-[#F7F2F6]">
-            One campus. Two days. Real hiring.
-          </h2>
-        </div>
-
-        {/* Stats Grid with clamp sizing, aligned baselines, and equal padding */}
-        <div className="mt-12 grid border-2 border-white/20 sm:grid-cols-2 lg:grid-cols-4 bg-[#2A2A2A]/90 rounded-2xl overflow-hidden divide-y sm:divide-y-0 sm:divide-x divide-white/20 shadow-[4px_4px_0px_rgba(0,0,0,0.35)]">
-          {DRIVE_STATS.map((s) => (
-            <div
-              key={s.label}
-              className="flex flex-col justify-between p-6 sm:p-7 md:p-8"
-            >
-              <div className="h-12 sm:h-14 flex items-center">
-                <p className="text-[clamp(1.75rem,3.2vw,3rem)] font-bold tracking-tight text-[#33FF67] font-display-title whitespace-nowrap leading-none">
-                  {s.value}
-                </p>
-              </div>
-              <div className="mt-6 flex-1 flex flex-col justify-start">
-                <p className="font-sans text-base font-semibold text-[#F7F2F6]">{s.label}</p>
-                <p className="mt-2 font-sans text-sm text-[#F7F2F6]/65 leading-relaxed">{s.body}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
 function Opportunities() {
   const { isLoggedIn } = useAuth();
 
   return (
     <section className="py-20 md:py-28 bg-[#2A2A2A] riso-texture">
       <Container>
-        <SectionHead index="03" label="Opportunities" title="Internship Board">
+        <SectionHead index="02" label="Opportunities" title="Internship Board">
           Participating companies and roles are in finalisation. Full specifications remain confidential until published.
         </SectionHead>
 
@@ -292,45 +240,11 @@ function Opportunities() {
   );
 }
 
-function Companies() {
-  return (
-    <section className="border-y border-white/20 bg-[#151515] py-20 md:py-28 brochure-grid-dense">
-      <Container>
-        <SectionHead index="04" label="Recruiters & Startups" title="Confidential Slots">
-          Hiring organisations are assigned anonymous slots. Identities are revealed upon interview invitation.
-        </SectionHead>
-
-        <div className="mt-12 grid grid-cols-2 border-l border-t border-white/20 sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex aspect-[4/3] flex-col items-center justify-center border-b border-r border-white/20 bg-[#2A2A2A]/80 p-4 text-center transition-colors hover:border-[#7484FE]"
-            >
-              <Shield className="h-5 w-5 text-[#7484FE]/70 mb-2" />
-              <span className="font-mono text-xs font-bold text-[#F7F2F6]">
-                SLOT {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="font-mono text-[10px] text-[#33FF67] font-semibold mt-1">CONFIDENTIAL</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-          <TbaBadge>15+ Stealth Organisations Enrolled</TbaBadge>
-          <Link to="/register" className="btn btn-line h-11 px-5 text-sm font-semibold">
-            Register as Hiring Partner <ArrowRight size={16} />
-          </Link>
-        </div>
-      </Container>
-    </section>
-  );
-}
-
 function HowItWorks() {
   return (
     <section className="py-20 md:py-28 bg-[#2A2A2A] riso-texture">
       <Container>
-        <SectionHead index="05" label="How It Works" title="Candidate Journey">
+        <SectionHead index="03" label="How It Works" title="Candidate Journey">
           Follow the structured five-step path from student registration to on-campus interviews.
         </SectionHead>
         <div className="mt-12">
@@ -347,15 +261,14 @@ function Scale() {
       <Container>
         <div className="grid gap-8 md:grid-cols-12 md:items-start">
           <div className="md:col-span-6">
-            <Eyebrow index="06">Summit Scale</Eyebrow>
+            <Eyebrow index="04">Summit Scale</Eyebrow>
             <h2 className="font-display-title mt-4 text-3xl sm:text-4xl md:text-5xl uppercase text-[#F7F2F6]">
               A proven track record of student empowerment.
             </h2>
           </div>
           <div className="md:col-span-6 border-l border-white/20 pl-6 md:pl-10">
             <p className="font-sans text-base text-[#F7F2F6]/75 leading-relaxed">
-              Equinox E-Summit has become one of Telangana's most celebrated student entrepreneurship summits.
-              The 2026 edition scales to 2000+ expected attendees with dedicated face-to-face recruitment tracks.
+              Equinox E-Summit has become one of Telangana's most celebrated student entrepreneurship summits, featuring dedicated face-to-face recruitment tracks.
             </p>
           </div>
         </div>
@@ -370,7 +283,7 @@ function AboutEquinox() {
       <Container>
         <div className="grid gap-10 md:grid-cols-12 md:items-start">
           <div className="md:col-span-4">
-            <Eyebrow index="07">The Summit</Eyebrow>
+            <Eyebrow index="05">The Summit</Eyebrow>
             <h2 className="font-display-title mt-4 text-3xl md:text-4xl uppercase text-[#F7F2F6]">
               Equinox E-Summit 2K26
             </h2>
@@ -399,7 +312,7 @@ function Cie() {
           <p className="font-sans text-sm text-[#F7F2F6]/70 mt-3">Centre for Innovation &amp; Entrepreneurship · MLRIT</p>
         </div>
         <div className="md:col-span-8">
-          <Eyebrow index="08">The Organisers</Eyebrow>
+          <Eyebrow index="06">The Organisers</Eyebrow>
           <h2 className="font-display-title mt-4 text-3xl md:text-4xl uppercase text-[#F7F2F6]">
             Nurturing Next-Generation Innovators
           </h2>
@@ -426,11 +339,11 @@ function FinalCta() {
           Open to all eligible students. Submit your credentials once, apply to multiple participating companies, and track interview shortlists.
         </p>
         <div className="mt-10 flex flex-wrap justify-center gap-4">
-          <Link to="/register" className="btn btn-signal h-12 px-8 text-base font-semibold">
-            Register as Candidate <ArrowRight className="h-4 w-4" />
+          <Link to="/internships" className="btn btn-signal h-12 px-8 text-base font-semibold">
+            Explore Opportunities <ArrowRight className="h-4 w-4" />
           </Link>
-          <Link to="/internships" className="btn btn-line h-12 px-8 text-base font-semibold">
-            Browse Opportunities
+          <Link to="/login" className="btn btn-line h-12 px-8 text-base font-semibold">
+            Candidate Login
           </Link>
         </div>
       </Container>
