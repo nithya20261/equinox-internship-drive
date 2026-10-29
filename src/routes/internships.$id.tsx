@@ -79,7 +79,7 @@ function Detail() {
     );
   }
 
-  const roleTitle = opportunity?.role || "Cloud & DevOps Engineering Intern";
+  const roleTitle = opportunity?.role || opportunity?.company || "Internship Role";
   const domain = opportunity?.domain || "Technology / Engineering";
   const duration = opportunity?.duration || "2 - 6 Months";
   const location = opportunity?.location || "MLRIT Campus";
@@ -112,8 +112,16 @@ function Detail() {
       <div className="mt-6 w-full border border-white/20 bg-[#151515] p-6 md:p-10 rounded-2xl shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-mono text-[#7484FE]">
-            <ShieldCheck className="h-4 w-4 text-[#33FF67]" />
-            <span>Hiring Partner Protected · Confidential</span>
+            {opportunity?.company && opportunity.company !== "Partner Organization (Confidential)" ? (
+              <span className="text-[#33FF67] font-bold uppercase tracking-wider text-sm">
+                {opportunity.company}
+              </span>
+            ) : (
+              <>
+                <ShieldCheck className="h-4 w-4 text-[#33FF67]" />
+                <span>Hiring Partner Protected · Confidential</span>
+              </>
+            )}
           </div>
           <span className="inline-flex items-center gap-1.5 border border-[#33FF67] bg-[#33FF67]/10 px-3.5 py-1 font-mono text-xs text-[#33FF67] rounded-full">
             ● Open for Applications
@@ -124,74 +132,89 @@ function Detail() {
           {roleTitle}
         </h1>
 
-        {/* Essential Role Specs Badges */}
-        <div className="mt-5 flex flex-wrap gap-3">
-          <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 font-mono text-xs text-[#F7F2F6] rounded-lg">
-            Domain: {domain}
-          </span>
-          <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 font-mono text-xs text-[#33FF67] rounded-lg">
-            Mode: {mode}
-          </span>
-          <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 font-mono text-xs text-[#7484FE] rounded-lg">
-            Location: {location}
-          </span>
-          <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 font-mono text-xs text-[#F7F2F6]/70 rounded-lg">
-            Duration: {duration}
-          </span>
-        </div>
-
-        {/* Role Description */}
-        <div className="mt-8 border-t border-white/10 pt-6">
-          <h2 className="text-xs font-mono uppercase text-[#7484FE] tracking-wider font-bold">
-            Role Overview & Description
-          </h2>
-          <p className="mt-3 text-sm md:text-base leading-relaxed text-[#F7F2F6]/85 font-sans">
-            {opportunity?.description ||
-              "Scale resilient cloud infrastructures for high-throughput microservices. Work on production-grade problem statements with direct industry mentorship during the Equinox E-Summit 2K26 Internship Drive."}
-          </p>
-        </div>
-
-        {/* Responsibilities & Skills */}
-        <div className="mt-8 grid gap-8 md:grid-cols-2 border-t border-white/10 pt-6">
-          <div>
-            <h3 className="text-xs font-mono uppercase text-[#7484FE] tracking-wider font-bold">
-              Key Responsibilities
-            </h3>
-            <ul className="mt-3 space-y-2.5 text-xs md:text-sm text-[#F7F2F6]/80 font-sans">
-              {parsedResponsibilities.map((item, idx) => (
-                <li key={idx} className="flex items-start gap-2.5">
-                  <span className="text-[#33FF67] font-bold mt-0.5">▹</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
+        {/* Student Forge Requirement (if present) */}
+        {opportunity?.requirement && (
+          <div className="mt-5 rounded-xl border border-white/10 bg-[#1e1e1e] p-4 text-sm font-sans text-white/90">
+            <span className="font-mono text-xs font-bold text-[#7484FE] uppercase tracking-wider block mb-1">
+              Requirement
+            </span>
+            <p className="leading-relaxed">{opportunity.requirement}</p>
           </div>
-          <div>
-            <h3 className="text-xs font-mono uppercase text-[#7484FE] tracking-wider font-bold">
-              Skills & Requirements
-            </h3>
-            <div className="mt-3 flex flex-wrap gap-2.5">
-              {parsedSkills.map((sk, idx) => (
-                <span
-                  key={idx}
-                  className="rounded-md border border-[#7484FE]/30 bg-[#7484FE]/10 px-3 py-1 font-mono text-xs text-[#7484FE]"
-                >
-                  {sk}
+        )}
+
+        {/* Essential Role Specs Badges (Mode, Duration, Stipend - ONLY if given!) */}
+        {(opportunity?.mode || opportunity?.duration || opportunity?.stipend) && (
+          <div className="mt-5 flex flex-wrap gap-3 font-mono text-xs">
+            {opportunity.mode && (
+              <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 text-[#33FF67] rounded-lg font-semibold">
+                <span className="text-white/40 font-normal">Mode: </span>
+                {opportunity.mode}
+              </span>
+            )}
+            {opportunity.duration && (
+              <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 text-[#7484FE] rounded-lg font-medium">
+                <span className="text-white/40 font-normal">Duration: </span>
+                {opportunity.duration}
+              </span>
+            )}
+            {opportunity.stipend && (
+              <span className="border border-white/10 bg-white/5 px-3.5 py-1.5 text-[#F7F2F6] rounded-lg font-medium">
+                <span className="text-white/40 font-normal">Stipend: </span>
+                <span className={opportunity.stipend.toLowerCase().startsWith("provided") ? "text-[#33FF67] font-semibold" : "text-white/60"}>
+                  {opportunity.stipend}
                 </span>
-              ))}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Role Description (ONLY if given!) */}
+        {opportunity?.description && (
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <h2 className="text-xs font-mono uppercase text-[#7484FE] tracking-wider font-bold">
+              Job Description
+            </h2>
+            <p className="mt-3 text-sm md:text-base leading-relaxed text-[#F7F2F6]/85 font-sans">
+              {opportunity.description}
+            </p>
+          </div>
+        )}
+
+        {/* Responsibilities & Skills (only if defined on opportunity) */}
+        {opportunity?.responsibilities && (
+          <div className="mt-8 grid gap-8 md:grid-cols-2 border-t border-white/10 pt-6">
+            <div>
+              <h3 className="text-xs font-mono uppercase text-[#7484FE] tracking-wider font-bold">
+                Key Responsibilities
+              </h3>
+              <ul className="mt-3 space-y-2.5 text-xs md:text-sm text-[#F7F2F6]/80 font-sans">
+                {parsedResponsibilities.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5">
+                    <span className="text-[#33FF67] font-bold mt-0.5">▹</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            {opportunity?.eligibility && (
-              <div className="mt-5">
-                <h4 className="text-[11px] font-mono uppercase text-[#33FF67] font-bold">
-                  Eligibility Criteria
-                </h4>
-                <p className="mt-1 text-xs text-[#F7F2F6]/70">
-                  {opportunity.eligibility}
-                </p>
+            {parsedSkills.length > 0 && (
+              <div>
+                <h3 className="text-xs font-mono uppercase text-[#7484FE] tracking-wider font-bold">
+                  Skills & Requirements
+                </h3>
+                <div className="mt-3 flex flex-wrap gap-2.5">
+                  {parsedSkills.map((sk, idx) => (
+                    <span
+                      key={idx}
+                      className="rounded-md border border-[#7484FE]/30 bg-[#7484FE]/10 px-3 py-1 font-mono text-xs text-[#7484FE]"
+                    >
+                      {sk}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* BELOW: 10 Blocks of Details & Resume Uploading (Full Width) */}
