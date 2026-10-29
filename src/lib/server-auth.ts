@@ -287,3 +287,208 @@ export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POS
       return { role: null };
     }
   });
+
+export interface StudentSubmitApplicationPayload {
+  studentToken: string;
+  internshipIds: string[];
+  resumePath: string | null;
+}
+
+/**
+ * Server function: Securely validates candidate session and submits application(s).
+ * Uses elevated service role client to bypass broken RLS policy on applications table.
+ */
+export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" })
+  .validator((data: StudentSubmitApplicationPayload) => data)
+  .handler(async ({ data }) => {
+    const { studentToken, internshipIds, resumePath } = data;
+    if (!studentToken) {
+      throw new Error("Authentication required. Please log in.");
+    }
+    if (!internshipIds || internshipIds.length === 0) {
+      throw new Error("No internships selected.");
+    }
+
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(studentToken);
+    if (authError || !authData?.user?.id) {
+      throw new Error("Invalid or expired session. Please log in again.");
+    }
+
+    const userId = authData.user.id;
+    const serverClient = getServerSupabase();
+
+    // 1. Ensure student profile exists in students table
+    const { data: student } = await serverClient
+      .from("students")
+      .select("id, resume_url")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!student) {
+      const meta = authData.user.user_metadata;
+      await serverClient.from("students").insert({
+        user_id: userId,
+        full_name: (meta?.["full_name"] as string | undefined) || "Applicant",
+        college: (meta?.["college"] as string | undefined) || "Unknown",
+        team_code: ((meta?.["team_code"] as string | undefined) || "EQX-APP").toUpperCase(),
+        mobile: (meta?.["mobile"] as string | undefined) || "N/A",
+        resume_url: resumePath,
+      });
+    } else if (resumePath) {
+      try {
+        await serverClient.from("students").update({ resume_url: resumePath }).eq("user_id", userId);
+      } catch (e) {
+        console.warn("Could not sync resume_url to student profile:", e);
+      }
+    }
+
+    // 2. Filter out already applied internships to prevent unique constraint errors
+    const { data: existingApps } = await serverClient
+      .from("applications")
+      .select("internship_id")
+      .eq("student_id", userId)
+      .in("internship_id", internshipIds);
+
+    const alreadyAppliedIds = new Set((existingApps || []).map((a) => a.internship_id));
+    const newInternshipIds = internshipIds.filter((id) => !alreadyAppliedIds.has(id));
+
+    if (newInternshipIds.length === 0) {
+      return {
+        totalRequested: internshipIds.length,
+        appliedCount: 0,
+        duplicateCount: alreadyAppliedIds.size,
+        alreadyAppliedIds: Array.from(alreadyAppliedIds),
+        successfulIds: [],
+      };
+    }
+
+    // 3. Insert application records using student_id = userId (matching foreign key to auth.users.id)
+    const rowsToInsert = newInternshipIds.map((internshipId) => ({
+      student_id: userId,
+      internship_id: internshipId,
+      status: "submitted",
+      resume_url: resumePath,
+    }));
+
+    const { data: inserted, error: insertError } = await serverClient
+      .from("applications")
+      .insert(rowsToInsert)
+      .select("id, internship_id");
+
+    if (insertError) {
+      throw new Error(`Failed to submit application: ${insertError.message}`);
+    }
+
+    const successfulIds = (inserted || []).map((row) => row.internship_id);
+
+    return {
+      totalRequested: internshipIds.length,
+      appliedCount: successfulIds.length,
+      duplicateCount: alreadyAppliedIds.size,
+      alreadyAppliedIds: Array.from(alreadyAppliedIds),
+      successfulIds,
+    };
+  });
+
+export interface RegisterStudentPayload {
+  email: string;
+  password: string;
+  fullName: string;
+  college: string;
+  teamCode: string;
+  mobile: string;
+  skills?: string[];
+  graduationYear?: number | null;
+}
+
+/**
+ * Server function: Registers a student account with auto-confirmed email.
+ * Students can register and sign in directly without email confirmation links.
+ */
+export const registerStudentServerFn = createServerFn({ method: "POST" })
+  .validator((data: RegisterStudentPayload) => data)
+  .handler(async ({ data }) => {
+    const supabaseAdmin = getServerSupabase();
+    const cleanEmail = (data.email || "").trim().toLowerCase();
+    const cleanTeamCode = (data.teamCode || "").trim().toUpperCase();
+    const cleanName = (data.fullName || "").trim();
+    const cleanCollege = (data.college || "").trim();
+    const cleanMobile = (data.mobile || "").trim();
+
+    if (!cleanEmail || !data.password || !cleanName || !cleanTeamCode) {
+      throw new Error("Full name, email, password, and team code are required.");
+    }
+
+    // 1. Create user with email_confirm: true (direct registration without email verification)
+    const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: cleanEmail,
+      password: data.password,
+      email_confirm: true,
+      user_metadata: {
+        role: "student",
+        full_name: cleanName,
+        college: cleanCollege,
+        team_code: cleanTeamCode,
+        mobile: cleanMobile,
+        skills: data.skills || [],
+        graduation_year: data.graduationYear || null,
+      },
+    });
+
+    if (createError) {
+      const errMsg = createError.message || "";
+      if (
+        errMsg.toLowerCase().includes("already registered") ||
+        errMsg.toLowerCase().includes("already been registered")
+      ) {
+        throw new Error("An account with this email is already registered. Please proceed to login.");
+      }
+      throw new Error(errMsg || "Registration failed. Please try again.");
+    }
+
+    const userId = createdUser?.user?.id;
+    if (!userId) {
+      throw new Error("Could not create user account.");
+    }
+
+    // 2. Ensure profiles entry exists
+    await supabaseAdmin.from("profiles").upsert({
+      id: userId,
+      role: "student",
+      email: cleanEmail,
+    });
+
+    // 3. Ensure students entry exists
+    const { error: studentError } = await supabaseAdmin.from("students").upsert({
+      user_id: userId,
+      full_name: cleanName,
+      college: cleanCollege,
+      team_code: cleanTeamCode,
+      mobile: cleanMobile,
+      skills: data.skills || [],
+      graduation_year: data.graduationYear || null,
+    });
+
+    if (studentError) {
+      console.warn("Student record creation note:", studentError.message);
+    }
+
+    // 4. Authenticate directly to obtain an active session immediately
+    const { data: authData, error: signInError } = await getServerAnonClient().auth.signInWithPassword({
+      email: cleanEmail,
+      password: data.password,
+    });
+
+    if (signInError || !authData.session) {
+      return {
+        user: createdUser.user,
+        session: null,
+      };
+    }
+
+    return {
+      user: authData.user,
+      session: authData.session,
+    };
+  });
+

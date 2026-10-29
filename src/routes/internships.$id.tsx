@@ -28,7 +28,6 @@ function Detail() {
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
 
-  const [resumeMode, setResumeMode] = useState<"profile" | "custom">("profile");
   const [customResume, setCustomResume] = useState<File | null>(null);
 
   useEffect(() => {
@@ -78,7 +77,7 @@ function Detail() {
     setApplyError(null);
     setApplySuccess(null);
 
-    if (resumeMode === "custom" && !customResume) {
+    if (!customResume) {
       setApplyError("Please select a resume file to upload (PDF, DOC, or DOCX).");
       return;
     }
@@ -86,7 +85,7 @@ function Detail() {
     try {
       setIsApplying(true);
       const res = await submitApplication(id, {
-        customResume: resumeMode === "custom" && customResume ? customResume : undefined,
+        customResume,
       });
       if (res.alreadyApplied) {
         setApplySuccess("You have already applied for this role! Check your Student Dashboard to track status.");
@@ -206,10 +205,6 @@ function Detail() {
                 <dd className="font-mono text-xs text-foreground">{domain}</dd>
               </div>
               <div className="flex justify-between gap-4 px-5 py-4">
-                <dt className="eyebrow text-muted-foreground">Duration</dt>
-                <dd className="font-mono text-xs text-foreground">{duration}</dd>
-              </div>
-              <div className="flex justify-between gap-4 px-5 py-4">
                 <dt className="eyebrow text-muted-foreground">Location</dt>
                 <dd className="font-mono text-xs text-foreground">{location}</dd>
               </div>
@@ -219,7 +214,7 @@ function Detail() {
               </div>
             </dl>
 
-            <div className="border-t border-foreground p-5 space-y-3">
+            <div className="border-t border-foreground p-5 space-y-4">
               {applySuccess ? (
                 <div className="border border-[#33FF67] bg-[#33FF67]/10 p-4 text-xs">
                   <div className="flex items-center gap-2 font-bold text-[#33FF67]">
@@ -253,48 +248,24 @@ function Detail() {
                     </>
                   ) : (
                     <>
-                      {/* Resume choice options */}
-                      <div className="border border-[#2A2A2A] bg-black p-3 space-y-2">
-                        <p className="font-mono text-[10px] uppercase font-bold text-[#7484FE]">
-                          Resume Submission
+                      {/* Direct resume upload */}
+                      <div className="border border-white/20 bg-black/60 p-4 space-y-2 rounded">
+                        <label className="block text-xs font-mono uppercase text-foreground">
+                          Upload Resume <span className="text-[#33FF67]">*</span>
+                        </label>
+                        <p className="text-[11px] text-muted-foreground">
+                          PDF, DOC, or DOCX (max 10MB)
                         </p>
-                        <label className="flex items-center gap-2 text-xs cursor-pointer">
-                          <input
-                            type="radio"
-                            name="detailResumeChoice"
-                            value="profile"
-                            checked={resumeMode === "profile"}
-                            onChange={() => setResumeMode("profile")}
-                            className="accent-[#33FF67]"
-                          />
-                          <span className="text-[#F7F2F6]">Use Profile Resume</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs cursor-pointer">
-                          <input
-                            type="radio"
-                            name="detailResumeChoice"
-                            value="custom"
-                            checked={resumeMode === "custom"}
-                            onChange={() => setResumeMode("custom")}
-                            className="accent-[#33FF67]"
-                          />
-                          <span className="text-[#F7F2F6]">Upload Different Resume</span>
-                        </label>
-
-                        {resumeMode === "custom" && (
-                          <div className="pt-2 border-t border-[#2A2A2A]">
-                            <input
-                              type="file"
-                              accept=".pdf,.doc,.docx"
-                              onChange={(e) => setCustomResume(e.target.files?.[0] || null)}
-                              className="w-full text-[11px] text-[#F7F2F6] file:mr-2 file:border-0 file:bg-[#7484FE] file:px-2 file:py-1 file:font-mono file:text-[10px] file:text-black"
-                            />
-                            {customResume && (
-                              <p className="mt-1 text-[10px] font-mono text-[#33FF67]">
-                                Attached: {customResume.name}
-                              </p>
-                            )}
-                          </div>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={(e) => setCustomResume(e.target.files?.[0] || null)}
+                          className="w-full text-xs text-foreground file:mr-3 file:border-0 file:bg-[#7484FE] file:px-3 file:py-1.5 file:font-mono file:text-xs file:font-bold file:text-black file:cursor-pointer cursor-pointer"
+                        />
+                        {customResume && (
+                          <p className="text-xs font-mono text-[#33FF67] pt-1">
+                            ✓ {customResume.name} ({(customResume.size / (1024 * 1024)).toFixed(2)} MB)
+                          </p>
                         )}
                       </div>
 
@@ -308,13 +279,13 @@ function Detail() {
                             <Loader2 className="h-4 w-4 animate-spin" /> Submitting...
                           </span>
                         ) : isStudent ? (
-                          "Apply Now"
+                          "Submit Application"
                         ) : (
                           "Apply (Student Account Required)"
                         )}
                       </button>
                       <p className="text-center text-xs text-muted-foreground">
-                        Your application record will be created with an independent review status.
+                        Your application will be marked as uploaded and sent directly for evaluation.
                       </p>
                     </>
                   )}

@@ -1,6 +1,11 @@
 import { supabase } from "./supabase";
 import { loginUser } from "./auth";
-import { loginStudentServerFn, loginAdminServerFn } from "./server-auth";
+import {
+  loginStudentServerFn,
+  loginAdminServerFn,
+  studentSubmitApplicationServerFn,
+  registerStudentServerFn,
+} from "./server-auth";
 
 const RESUME_BUCKET = "resumes";
 
@@ -13,7 +18,7 @@ export interface StudentRegistrationInput {
   mobile: string;
   skills?: string[];
   graduation_year?: number;
-  resume: File;
+  resume?: File | null;
 }
 
 export interface Opportunity {
@@ -27,6 +32,8 @@ export interface Opportunity {
   responsibilities?: string | string[];
   skills?: string | string[];
   eligibility?: string;
+  salary?: string;
+  deadline?: string;
   status: string;
   created_at: string;
   company?: string;
@@ -96,90 +103,45 @@ export async function uploadResumeFile(userId: string, file: File): Promise<stri
 }
 
 /**
- * Register a student and upload their initial profile resume securely.
- * Handles email-confirmation mode gracefully if email confirmation is enabled in Supabase.
+ * Register a student directly without requiring email verification.
+ * Creates an auto-confirmed user account, profile, and student entry,
+ * and activates the authenticated session immediately.
  */
 export async function registerStudentWithResume(input: StudentRegistrationInput) {
   const cleanEmail = input.email.trim().toLowerCase();
   const cleanTeamCode = input.team_code.trim().toUpperCase();
 
-  // 1. Sign up with Supabase Auth including metadata
-  const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail,
-    password: input.password,
-    options: {
-      data: {
-        role: "student",
-        full_name: input.full_name.trim(),
-        college: input.college.trim(),
-        team_code: cleanTeamCode,
-        mobile: input.mobile.trim(),
-        skills: input.skills ?? [],
-        graduation_year: input.graduation_year ?? null,
-      },
+  const result = await registerStudentServerFn({
+    data: {
+      email: cleanEmail,
+      password: input.password,
+      fullName: input.full_name,
+      college: input.college,
+      teamCode: cleanTeamCode,
+      mobile: input.mobile,
+      skills: input.skills ?? [],
+      graduationYear: input.graduation_year ?? null,
     },
   });
 
-  if (error) throw error;
-
-  const user = data.user;
-  if (!user) throw new Error("Registration failed. Please try again.");
-
-  // If email confirmation is required, session will be null
-  if (!data.session) {
-    return {
-      confirmationRequired: true,
-      message:
-        "A verification email has been sent to your address. Please confirm your email before signing in.",
-      user,
-    };
+  if (result.session) {
+    // Restore authenticated session in client Supabase instance
+    await supabase.auth.setSession({
+      access_token: result.session.access_token,
+      refresh_token: result.session.refresh_token,
+    });
   }
 
-  // 2. Immediate session is active: Upsert profile record
-  try {
-    await supabase.from("profiles").upsert({
+  const user = result.user;
+  if (user) {
+    loginUser({
       id: user.id,
       role: "student",
+      name: input.full_name.trim(),
+      teamCode: cleanTeamCode,
       email: cleanEmail,
     });
-  } catch (err) {
-    console.warn("Profile creation note:", err);
   }
-
-  // 3. Upload resume to private 'resumes' storage bucket
-  let resumePath: string | null = null;
-  if (input.resume) {
-    try {
-      resumePath = await uploadResumeFile(user.id, input.resume);
-    } catch (err) {
-      console.warn("Storage upload exception during registration:", err);
-    }
-  }
-
-  // 4. Upsert student record
-  const { error: studentError } = await supabase.from("students").upsert({
-    user_id: user.id,
-    full_name: input.full_name.trim(),
-    college: input.college.trim(),
-    team_code: cleanTeamCode,
-    mobile: input.mobile.trim(),
-    skills: input.skills ?? [],
-    graduation_year: input.graduation_year ?? null,
-    resume_url: resumePath,
-  });
-
-  if (studentError) {
-    console.warn("Student record creation note:", studentError.message);
-  }
-
-  // 5. Update local auth state
-  loginUser({
-    id: user.id,
-    role: "student",
-    name: input.full_name,
-    teamCode: cleanTeamCode,
-    email: cleanEmail,
-  });
 
   return { confirmationRequired: false, user };
 }
@@ -345,107 +307,29 @@ export async function submitBatchApplications(
   }
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) {
+  if (!session?.access_token || !session?.user) {
     throw new Error("Please log in before submitting applications.");
   }
 
-  // 1. Resolve student ID and existing profile resume
-  let studentId: string | null = null;
-  let profileResumeUrl: string | null = null;
-
-  const { data: student } = await supabase
-    .from("students")
-    .select("id, resume_url")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (student?.id) {
-    studentId = student.id;
-    profileResumeUrl = student.resume_url;
-  } else {
-    // If student profile row missing, create it from auth metadata
-    const meta = user.user_metadata;
-    const { data: newStudent, error: createError } = await supabase
-      .from("students")
-      .insert({
-        user_id: user.id,
-        full_name: (meta?.["full_name"] as string | undefined) || "Applicant",
-        college: (meta?.["college"] as string | undefined) || "Unknown",
-        team_code: ((meta?.["team_code"] as string | undefined) || "EQX-APP").toUpperCase(),
-        mobile: (meta?.["mobile"] as string | undefined) || "N/A",
-      })
-      .select("id, resume_url")
-      .single();
-
-    if (createError) throw createError;
-    studentId = newStudent.id;
-    profileResumeUrl = newStudent.resume_url;
-  }
-
-  // 2. Upload custom resume if provided. NULL explicitly denotes reusing student profile resume.
+  // 1. Upload resume to private 'resumes' storage bucket if provided
   let resumePath: string | null = null;
   if (input.customResume) {
-    resumePath = await uploadResumeFile(user.id, input.customResume);
+    resumePath = await uploadResumeFile(session.user.id, input.customResume);
   }
 
-  // 3. Check for existing applications among selected IDs to prevent duplicates
-  const { data: existingApplications, error: checkError } = await supabase
-    .from("applications")
-    .select("internship_id")
-    .eq("student_id", studentId)
-    .in("internship_id", input.internshipIds);
+  // 2. Delegate application submission and duplicate prevention to secure server function
+  const result = await studentSubmitApplicationServerFn({
+    data: {
+      studentToken: session.access_token,
+      internshipIds: input.internshipIds,
+      resumePath,
+    },
+  });
 
-  if (checkError) {
-    console.warn("Duplicate check note:", checkError.message);
-  }
-
-  const alreadyAppliedIds = new Set(
-    (existingApplications || []).map((app) => app.internship_id)
-  );
-
-  const newInternshipIds = input.internshipIds.filter(
-    (id) => !alreadyAppliedIds.has(id)
-  );
-
-  if (newInternshipIds.length === 0) {
-    return {
-      totalRequested: input.internshipIds.length,
-      appliedCount: 0,
-      duplicateCount: input.internshipIds.length,
-      alreadyAppliedIds: Array.from(alreadyAppliedIds),
-      successfulIds: [],
-    };
-  }
-
-  // 4. Insert one separate application record per selected internship
-  const rowsToInsert = newInternshipIds.map((internshipId) => ({
-    internship_id: internshipId,
-    student_id: studentId,
-    status: "submitted",
-    resume_url: resumePath,
-  }));
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("applications")
-    .insert(rowsToInsert)
-    .select("id, internship_id");
-
-  if (insertError) {
-    throw insertError;
-  }
-
-  const successfulIds = (inserted || []).map((row) => row.internship_id);
-
-  return {
-    totalRequested: input.internshipIds.length,
-    appliedCount: successfulIds.length,
-    duplicateCount: alreadyAppliedIds.size,
-    alreadyAppliedIds: Array.from(alreadyAppliedIds),
-    successfulIds,
-  };
+  return result;
 }
 
 /**
@@ -483,7 +367,7 @@ export async function getStudentApplications(): Promise<StudentApplication[]> {
         duration
       )
     `)
-    .eq("student_id", student.id)
+    .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) {

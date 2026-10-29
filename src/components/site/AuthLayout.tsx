@@ -13,36 +13,38 @@ export function AuthLayout({
   children: ReactNode;
 }) {
   return (
-    <Container className="grid min-h-[80vh] gap-0 py-12 lg:grid-cols-2">
-      <div className="flex flex-col justify-between border border-[#2A2A2A] bg-black p-8 text-[#F7F2F6] md:p-12 relative overflow-hidden">
-        <div className="absolute right-4 top-4 opacity-30 pointer-events-none">
-          <WireframeGlobe size={180} strokeColor="#F7F2F6" accentColor="#33FF67" speed={0.005} />
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-2">
-            <span className="pulse-dot h-2 w-2 rounded-full bg-[#33FF67]" />
-            <p className="font-mono text-xs font-bold tracking-widest text-[#7484FE] uppercase">
-              {EVENT.name}
-            </p>
+    <Container className="py-10 sm:py-14">
+      <div className="grid min-h-[75vh] rounded-3xl border-2 border-white/20 overflow-hidden shadow-[6px_6px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs lg:grid-cols-2">
+        <div className="flex flex-col justify-between brochure-grid-dense bg-[#151515] p-8 text-[#F7F2F6] md:p-12 relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
+          <div className="absolute right-4 top-4 opacity-25 pointer-events-none">
+            <WireframeGlobe size={180} strokeColor="#F7F2F6" accentColor="#33FF67" speed={0.005} />
           </div>
-          <div className="mt-14">
-            <h1 className="font-display font-black text-5xl md:text-7xl leading-none text-[#F7F2F6]">
-              {title}
-            </h1>
-            <div className="mt-6 max-w-sm font-sans text-sm text-[#F7F2F6]/70 leading-relaxed">
-              {aside}
+
+          <div className="relative z-10">
+            <div className="flex items-center gap-2">
+              <span className="pulse-dot h-2 w-2 rounded-full bg-[#33FF67]" />
+              <p className="font-mono text-xs font-bold tracking-widest text-[#7484FE] uppercase">
+                {EVENT.name} · Sub-Event 06
+              </p>
+            </div>
+            <div className="mt-10 sm:mt-14">
+              <h1 className="font-display-title font-black text-4xl sm:text-5xl md:text-6xl uppercase tracking-tight text-[#F7F2F6]">
+                {title}
+              </h1>
+              <div className="mt-5 max-w-sm font-sans text-sm text-white/70 leading-relaxed">
+                {aside}
+              </div>
             </div>
           </div>
+
+          <div className="relative z-10 pt-10 font-mono text-xs text-white/50">
+            {EVENT.dates} · MLRIT {EVENT.city}
+          </div>
         </div>
 
-        <div className="relative z-10 pt-10 font-mono text-xs text-[#F7F2F6]/50">
-          {EVENT.dates} · MLRIT {EVENT.city}
+        <div className="bg-[#2A2A2A]/95 p-8 md:p-12 text-[#F7F2F6]">
+          {children}
         </div>
-      </div>
-
-      <div className="border-t lg:border-t-0 lg:border-l border-b border-r border-[#2A2A2A] bg-[#0A0A0A] p-8 md:p-12 text-[#F7F2F6]">
-        {children}
       </div>
     </Container>
   );
@@ -59,7 +61,7 @@ export function RoleTabs({
     <div
       role="tablist"
       aria-label="Account type"
-      className="grid grid-cols-2 border border-[#2A2A2A] bg-black"
+      className="grid grid-cols-2 p-1 rounded-full border border-white/20 bg-[#151515]"
     >
       {(["student", "admin"] as const).map((r) => (
         <button
@@ -68,10 +70,10 @@ export function RoleTabs({
           type="button"
           aria-selected={value === r}
           onClick={() => onChange(r)}
-          className={`font-mono text-xs uppercase tracking-wider h-11 transition-all ${
+          className={`font-sans text-sm font-semibold tracking-normal h-9 rounded-full transition-all ${
             value === r
-              ? "bg-[#7484FE] text-black font-bold shadow-[0_0_12px_rgba(116,132,254,0.3)]"
-              : "text-[#F7F2F6]/60 hover:text-[#F7F2F6] hover:bg-[#2A2A2A]/40"
+              ? "bg-[#7484FE] text-[#151515] font-bold shadow-md"
+              : "text-white/75 hover:text-white"
           }`}
         >
           {r === "student" ? "Student" : "Admin"}

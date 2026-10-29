@@ -1,41 +1,42 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Shield, Lock } from "lucide-react";
 import { INTERNSHIP_FIELDS, JOURNEY } from "@/data/site";
-import { Reveal, TbaBadge } from "./primitives";
+import { Reveal } from "./primitives";
+import type { Opportunity } from "@/lib/api";
 
 export function Journey() {
   return (
-    <ol className="grid border-l border-t border-[#2A2A2A] md:grid-cols-5 bg-black">
+    <ol className="grid gap-4 md:grid-cols-5">
       {JOURNEY.map((j, i) => (
         <li
           key={j.step}
-          className="group relative border-b border-r border-[#2A2A2A] p-6 transition-all hover:bg-[#0A0A0A] hover:border-[#7484FE] md:min-h-72"
+          className="group relative rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-5 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs transition hover:border-[#7484FE]/80 flex flex-col justify-between"
         >
-          <Reveal delay={i * 0.06}>
-            <span className="display text-6xl md:text-7xl bg-gradient-to-br from-[#7484FE] to-[#33FF67] bg-clip-text text-transparent">
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <h3 className="headline mt-8 text-xl md:text-2xl uppercase text-[#F7F2F6]">
+          <Reveal delay={i * 0.05}>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs font-bold text-[#33FF67]">
+                STEP 0{i + 1}
+              </span>
+              {i < JOURNEY.length - 1 && (
+                <ArrowRight
+                  className="hidden text-white/30 group-hover:text-[#33FF67] group-hover:translate-x-0.5 transition-all md:block"
+                  size={16}
+                  aria-hidden
+                />
+              )}
+            </div>
+            <h3 className="font-sans mt-4 text-base font-bold text-[#F7F2F6]">
               {j.step}
             </h3>
-            <p className="mt-3 text-xs sm:text-sm text-[#F7F2F6]/60 leading-relaxed">
+            <p className="mt-2 font-sans text-sm text-white/70 leading-relaxed">
               {j.note}
             </p>
           </Reveal>
-          {i < JOURNEY.length - 1 && (
-            <ArrowRight
-              className="absolute right-4 top-6 hidden text-[#2A2A2A] group-hover:text-[#33FF67] transition-colors md:block"
-              size={18}
-              aria-hidden
-            />
-          )}
         </li>
       ))}
     </ol>
   );
 }
-
-import type { Opportunity } from "@/lib/api";
 
 /** Structural preview or real internship listing with anonymous company shield. */
 export function OpportunitySlot({
@@ -68,73 +69,73 @@ export function OpportunitySlot({
 
   return (
     <article
-      className={`group grid gap-4 border-b border-[#2A2A2A] py-6 transition-colors md:grid-cols-12 md:items-center md:px-4 ${
-        isSelected ? "bg-[#7484FE]/10 border-l-2 border-l-[#7484FE]" : "hover:bg-[#0A0A0A]"
+      className={`group rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-5 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs transition hover:border-[#7484FE]/80 ${
+        isSelected ? "ring-2 ring-[#7484FE] bg-[#1E1E1E]" : ""
       }`}
     >
-      <div className="flex items-center gap-4 md:col-span-5">
-        {selectable && item?.id ? (
-          <label className="relative flex cursor-pointer items-center justify-center p-1" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => onToggleSelect?.()}
-              className="h-5 w-5 rounded border border-[#2A2A2A] bg-black accent-[#33FF67] cursor-pointer"
-              aria-label={`Select ${title}`}
-            />
-          </label>
-        ) : null}
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center border font-mono text-xs font-bold transition-colors ${
-          isSelected ? "border-[#33FF67] bg-[#33FF67]/10 text-[#33FF67]" : "border-[#2A2A2A] bg-black text-[#7484FE]"
-        }`}>
-          {String(n).padStart(2, "0")}
-        </div>
-        <div>
-          <div className="flex items-center gap-1.5 font-mono text-[10px] text-[#7484FE]">
-            <Shield className="h-3 w-3" />
-            <span className="uppercase tracking-wider">Company Identity Shielded</span>
+      <div className="grid gap-4 md:grid-cols-12 md:items-center">
+        <div className="flex items-center gap-4 md:col-span-5">
+          {selectable && item?.id ? (
+            <label className="relative flex cursor-pointer items-center justify-center p-1" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggleSelect?.()}
+                className="h-5 w-5 rounded border border-white/30 bg-[#151515] accent-[#33FF67] cursor-pointer"
+                aria-label={`Select ${title}`}
+              />
+            </label>
+          ) : null}
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-[#151515] font-mono text-xs font-black text-[#7484FE] shadow-sm">
+            {String(n).padStart(2, "0")}
           </div>
-          <h3 className="headline mt-1 text-xl sm:text-2xl text-[#F7F2F6]">
-            {title}
-          </h3>
+          <div>
+            <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-[#7484FE] uppercase tracking-wider">
+              <Shield className="h-3 w-3" />
+              <span>Identity Shielded</span>
+            </div>
+            <h3 className="font-sans mt-1 text-base sm:text-lg font-bold text-[#F7F2F6]">
+              {title}
+            </h3>
+          </div>
         </div>
-      </div>
 
-      <dl className="grid grid-cols-3 gap-3 text-xs md:col-span-4">
-        <div>
-          <dt className="eyebrow text-[0.6rem] text-[#F7F2F6]/50">Domain</dt>
-          <dd className="mt-0.5 text-[#F7F2F6] font-mono text-xs truncate">{domain}</dd>
-        </div>
-        <div>
-          <dt className="eyebrow text-[0.6rem] text-[#F7F2F6]/50">Location</dt>
-          <dd className="mt-0.5 text-[#F7F2F6] font-mono text-xs truncate">{location}</dd>
-        </div>
-        <div>
-          <dt className="eyebrow text-[0.6rem] text-[#F7F2F6]/50">Mode</dt>
-          <dd className="mt-0.5 text-[#33FF67] font-mono text-xs">{mode}</dd>
-        </div>
-      </dl>
+        <dl className="grid grid-cols-3 gap-3 text-sm md:col-span-4 font-sans">
+          <div>
+            <dt className="text-xs text-white/50 font-medium">Domain</dt>
+            <dd className="mt-0.5 text-white/90 truncate font-medium">{domain}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-white/50 font-medium">Location</dt>
+            <dd className="mt-0.5 text-white/90 truncate font-medium">{location}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-white/50 font-medium">Mode</dt>
+            <dd className="mt-0.5 text-[#33FF67] font-semibold">{mode}</dd>
+          </div>
+        </dl>
 
-      <div className="flex items-center justify-between gap-3 md:col-span-3 md:justify-end">
-        <span className="inline-flex items-center gap-1 border border-[#2A2A2A] bg-black px-2.5 py-1 font-mono text-[10px] text-[#7484FE]">
-          <Lock className="h-2.5 w-2.5" /> Confidential
-        </span>
-        {isLoggedIn ? (
-          <Link
-            to="/internships/$id"
-            params={{ id: detailId }}
-            className="btn btn-signal h-8 px-3 text-xs"
-          >
-            View Role <ArrowRight size={12} className="ml-1" />
-          </Link>
-        ) : (
-          <Link
-            to="/login"
-            className="btn btn-line h-8 px-3 text-xs"
-          >
-            Login <Lock size={12} className="ml-1" />
-          </Link>
-        )}
+        <div className="flex items-center justify-between gap-3 md:col-span-3 md:justify-end">
+          <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-[#151515] px-3 py-1 font-sans text-xs font-semibold text-[#7484FE]">
+            <Lock className="h-3 w-3" /> Confidential
+          </span>
+          {isLoggedIn ? (
+            <Link
+              to="/internships/$id"
+              params={{ id: detailId }}
+              className="btn btn-signal h-9 px-4 text-sm font-semibold"
+            >
+              View Role <ArrowRight size={14} className="ml-1" />
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              className="btn btn-line h-9 px-4 text-sm font-semibold"
+            >
+              Login <Lock size={14} className="ml-1" />
+            </Link>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -146,7 +147,7 @@ export function ListingAnatomy() {
       {[...INTERNSHIP_FIELDS, "Apply"].map((f) => (
         <span
           key={f}
-          className="font-mono text-[10px] tracking-wider uppercase border border-[#2A2A2A] bg-[#0A0A0A] px-3 py-1.5 text-[#F7F2F6]/80"
+          className="rounded-full border border-white/20 bg-[#151515] px-3.5 py-1.5 font-sans text-xs font-semibold text-white/90 shadow-[2px_2px_0px_#2A2A2A]"
         >
           {f}
         </span>
@@ -158,12 +159,12 @@ export function ListingAnatomy() {
 export function CtaPair({ inverse = false }: { inverse?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Link to="/internships" className="btn btn-signal">
+      <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold">
         Explore Opportunities <ArrowRight size={16} />
       </Link>
       <Link
         to="/register"
-        className={`btn ${inverse ? "btn-line-inverse" : "btn-line"}`}
+        className={`btn h-11 px-6 text-sm font-semibold ${inverse ? "btn-line-inverse" : "btn-line"}`}
       >
         Register as Student
       </Link>

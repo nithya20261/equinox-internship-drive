@@ -136,8 +136,8 @@ function Internships() {
     setBatchError(null);
     setBatchResult(null);
 
-    if (resumeMode === "custom" && !customResume) {
-      setBatchError("Please select a resume file to upload (PDF, DOC, or DOCX).");
+    if (!customResume) {
+      setBatchError("Please select a resume file to upload (PDF, DOC, or DOCX up to 10MB).");
       return;
     }
 
@@ -145,12 +145,15 @@ function Internships() {
       setIsSubmittingBatch(true);
       const res = await submitBatchApplications({
         internshipIds: Array.from(selectedIds),
-        customResume: resumeMode === "custom" && customResume ? customResume : undefined,
+        customResume,
       });
       setBatchResult(res);
       setSelectedIds(new Set());
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to submit applications.";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : (err as any)?.message || (err as any)?.error_description || "Failed to submit applications.";
       setBatchError(msg);
     } finally {
       setIsSubmittingBatch(false);
@@ -167,7 +170,7 @@ function Internships() {
   const selectedOpportunities = opportunities.filter((o) => selectedIds.has(o.id));
 
   return (
-    <>
+    <div className="riso-texture brochure-grid min-h-screen">
       <PageHero
         label="Opportunities board"
         title={
@@ -185,9 +188,9 @@ function Internships() {
       <Container className="py-14">
         {/* Auth notice banner when not logged in */}
         {!isLoggedIn && (
-          <div className="mb-10 flex flex-col items-start justify-between gap-4 border border-[#33FF67] bg-[#0A0A0A] p-6 sm:flex-row sm:items-center">
+          <div className="mb-10 flex flex-col items-start justify-between gap-4 rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs sm:flex-row sm:items-center">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-[#2A2A2A] bg-black text-[#33FF67]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-[#151515] text-[#33FF67]">
                 <Lock className="h-5 w-5" />
               </div>
               <div>
@@ -212,7 +215,7 @@ function Internships() {
         )}
 
         {/* Confidentiality protocol notice */}
-        <div className="mb-6 flex items-center justify-between border border-[#2A2A2A] bg-[#0A0A0A] p-4 text-xs font-mono text-[#F7F2F6]/75">
+        <div className="mb-6 flex items-center justify-between rounded-full border border-white/20 bg-[#151515] px-5 py-2.5 text-xs font-mono text-white/80">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-[#33FF67]" />
             <span className="text-[#33FF67] font-bold uppercase">RECRUITER SHIELD ACTIVE:</span>
@@ -224,7 +227,7 @@ function Internships() {
         </div>
 
         {/* Track Selection Tabs */}
-        <div className="mb-6 grid grid-cols-3 border border-[#2A2A2A] bg-black">
+        <div className="mb-6 grid grid-cols-3 p-1 rounded-full border border-white/20 bg-[#151515]">
           {[
             { id: "all", label: "All Tracks (20 Categories)" },
             { id: "technical", label: "Technical Track (10)" },
@@ -237,9 +240,9 @@ function Internships() {
                 setActiveTrack(t.id as InternshipTrack);
                 setSelectedCategory("all");
               }}
-              className={`font-mono text-xs uppercase tracking-wider py-3 text-center transition-all ${
+              className={`font-sans text-sm font-semibold tracking-normal py-2.5 rounded-full text-center transition-all ${
                 activeTrack === t.id
-                  ? "bg-[#7484FE] text-black font-bold shadow-[0_0_12px_rgba(116,132,254,0.3)]"
+                  ? "bg-[#7484FE] text-[#151515] font-bold shadow-[0_0_12px_rgba(116,132,254,0.3)]"
                   : "text-[#F7F2F6]/60 hover:text-[#F7F2F6] hover:bg-[#2A2A2A]/40"
               }`}
             >
@@ -249,7 +252,7 @@ function Internships() {
         </div>
 
         {/* Search & Category Filter Bar */}
-        <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-4">
+        <div className="rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-4 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
             <div className="flex-1">
               <input
@@ -258,7 +261,7 @@ function Internships() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search roles, required skills or domains..."
-                className="w-full border border-[#2A2A2A] bg-black px-4 py-3 font-mono text-sm text-[#F7F2F6] outline-none placeholder:text-[#F7F2F6]/40 focus:border-[#7484FE]"
+                className="w-full rounded-xl border border-white/20 bg-[#151515] px-4 py-3 font-sans text-sm text-[#F7F2F6] outline-none placeholder:text-[#F7F2F6]/40 focus:border-[#7484FE]"
               />
             </div>
             <div className="w-full md:w-80">
@@ -267,7 +270,7 @@ function Internships() {
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 aria-label="Filter by Category"
-                className="w-full border border-[#2A2A2A] bg-black px-4 py-3 font-mono text-xs text-[#F7F2F6] outline-none focus:border-[#7484FE]"
+                className="w-full rounded-xl border border-white/20 bg-[#151515] px-4 py-3 font-sans text-sm text-[#F7F2F6] outline-none focus:border-[#7484FE]"
               >
                 <option value="all">
                   All Categories ({availableCategories.length})
@@ -501,72 +504,32 @@ function Internships() {
                   ))}
                 </div>
 
-                {/* Resume Workflow Selection */}
+                {/* Resume Upload Input */}
                 <div className="mt-6 border border-[#2A2A2A] bg-black p-4">
                   <p className="font-mono text-xs font-bold uppercase tracking-wider text-[#F7F2F6]">
-                    Resume Selection
+                    Upload Resume *
                   </p>
                   <p className="mt-1 text-xs text-[#F7F2F6]/60">
-                    Reuse your profile resume across all selected roles or upload a custom tailored
-                    resume.
+                    Upload your resume for the selected roles (PDF, DOC, or DOCX, Max 10MB).
                   </p>
 
-                  <div className="mt-4 space-y-3">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="resumeChoice"
-                        value="profile"
-                        checked={resumeMode === "profile"}
-                        onChange={() => setResumeMode("profile")}
-                        className="mt-1 accent-[#33FF67]"
-                      />
-                      <div>
-                        <p className="text-xs font-bold text-[#F7F2F6]">Use Profile Resume</p>
-                        <p className="text-[11px] text-[#F7F2F6]/50">
-                          Attaches the verified resume uploaded during account registration.
-                        </p>
-                      </div>
-                    </label>
-
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="resumeChoice"
-                        value="custom"
-                        checked={resumeMode === "custom"}
-                        onChange={() => setResumeMode("custom")}
-                        className="mt-1 accent-[#33FF67]"
-                      />
-                      <div>
-                        <p className="text-xs font-bold text-[#F7F2F6]">
-                          Upload Tailored Resume (Max 10MB)
-                        </p>
-                        <p className="text-[11px] text-[#F7F2F6]/50">
-                          Upload a specific resume customized for these selected applications.
-                        </p>
-                      </div>
-                    </label>
+                  <div className="mt-4">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setCustomResume(file);
+                        setBatchError(null);
+                      }}
+                      className="block w-full text-xs text-[#F7F2F6] file:mr-4 file:border-0 file:bg-[#7484FE] file:px-4 file:py-2 file:font-mono file:text-xs file:font-bold file:text-black hover:file:bg-[#7484FE]/80"
+                    />
+                    {customResume && (
+                      <p className="mt-2 font-mono text-[11px] text-[#33FF67]">
+                        Selected: {customResume.name} ({(customResume.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
                   </div>
-
-                  {resumeMode === "custom" && (
-                    <div className="mt-4 border-t border-[#2A2A2A] pt-4">
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null;
-                          setCustomResume(file);
-                        }}
-                        className="block w-full text-xs text-[#F7F2F6] file:mr-4 file:border-0 file:bg-[#7484FE] file:px-4 file:py-2 file:font-mono file:text-xs file:font-bold file:text-black hover:file:bg-[#7484FE]/80"
-                      />
-                      {customResume && (
-                        <p className="mt-2 font-mono text-[11px] text-[#33FF67]">
-                          Selected: {customResume.name} ({(customResume.size / 1024 / 1024).toFixed(2)} MB)
-                        </p>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {batchError && (
@@ -606,6 +569,6 @@ function Internships() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
