@@ -783,16 +783,6 @@ function AdminConsole() {
         </div>
       ),
     },
-    {
-      key: "companies",
-      label: "Companies",
-      empty: "Participating companies (identity masked from candidates under Recruiter Shield).",
-    },
-    {
-      key: "analytics",
-      label: "Analytics",
-      empty: "Drive telemetry and registration stats.",
-    },
   ];
 
   return (

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowRight, Shield, Lock } from "lucide-react";
 import { Container, Eyebrow, Reveal, SectionHead } from "@/components/site/primitives";
-import { Journey, ListingAnatomy, OpportunitySlot } from "@/components/site/blocks";
+import { Journey, ListingAnatomy } from "@/components/site/blocks";
 import { CinematicIntro } from "@/components/site/CinematicIntro";
 import { useAuth } from "@/lib/auth";
 
@@ -41,11 +41,7 @@ function Index() {
         <Hero />
         <WhatIs />
         <IdentityShield />
-        <Opportunities />
         <HowItWorks />
-        <Scale />
-        <AboutEquinox />
-        <Cie />
         <FinalCta />
       </div>
     </div>
@@ -202,123 +198,15 @@ function WhatIs() {
   );
 }
 
-function Opportunities() {
-  const { isLoggedIn } = useAuth();
-
-  return (
-    <section className="py-20 md:py-28 bg-[#2A2A2A] riso-texture">
-      <Container>
-        <SectionHead index="02" label="Opportunities" title="Internship Board">
-          Participating companies and roles are in finalisation. Full specifications remain confidential until published.
-        </SectionHead>
-
-        {!isLoggedIn && (
-          <div className="mt-8 flex items-center gap-3 rounded-xl border border-[#7484FE]/40 bg-[#7484FE]/10 p-4 font-sans text-sm text-[#F7F2F6]">
-            <Lock className="h-4 w-4 text-[#7484FE] shrink-0" />
-            <span>Opportunity details and candidate applications require student authentication.</span>
-          </div>
-        )}
-
-        <div className="mt-8 space-y-4">
-          {[1, 2, 3].map((n) => (
-            <OpportunitySlot key={n} n={n} />
-          ))}
-        </div>
-
-        <div className="mt-10 flex flex-wrap gap-4">
-          <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold">
-            View All Opportunities <ArrowRight size={16} />
-          </Link>
-          {!isLoggedIn && (
-            <Link to="/login" className="btn btn-line h-11 px-6 text-sm font-semibold">
-              Log in to Unlock Details
-            </Link>
-          )}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
 function HowItWorks() {
   return (
     <section className="py-20 md:py-28 bg-[#2A2A2A] riso-texture">
       <Container>
-        <SectionHead index="03" label="How It Works" title="Candidate Journey">
+        <SectionHead index="02" label="How It Works" title="Candidate Journey">
           Follow the structured five-step path from student registration to on-campus interviews.
         </SectionHead>
         <div className="mt-12">
           <Journey />
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function Scale() {
-  return (
-    <section className="border-t border-white/20 bg-[#151515] py-20 brochure-grid-dense">
-      <Container>
-        <div className="grid gap-8 md:grid-cols-12 md:items-start">
-          <div className="md:col-span-6">
-            <Eyebrow index="04">Summit Scale</Eyebrow>
-            <h2 className="font-display-title mt-4 text-3xl sm:text-4xl md:text-5xl uppercase text-[#F7F2F6]">
-              A proven track record of student empowerment.
-            </h2>
-          </div>
-          <div className="md:col-span-6 border-l border-white/20 pl-6 md:pl-10">
-            <p className="font-sans text-base text-[#F7F2F6]/75 leading-relaxed">
-              Equinox E-Summit has become one of Telangana's most celebrated student entrepreneurship summits, featuring dedicated face-to-face recruitment tracks.
-            </p>
-          </div>
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function AboutEquinox() {
-  return (
-    <section className="border-t border-white/20 bg-[#2A2A2A] py-20 riso-texture">
-      <Container>
-        <div className="grid gap-10 md:grid-cols-12 md:items-start">
-          <div className="md:col-span-4">
-            <Eyebrow index="05">The Summit</Eyebrow>
-            <h2 className="font-display-title mt-4 text-3xl md:text-4xl uppercase text-[#F7F2F6]">
-              Equinox E-Summit 2K26
-            </h2>
-          </div>
-          <div className="md:col-span-8 text-[#F7F2F6]/75 font-sans text-base leading-relaxed space-y-4">
-            <p>
-              Held at MLR Institute of Technology, Hyderabad, on 30 &amp; 31 October. The summit features keynote panels, founder showcases, hackathons, and the exclusive Internship Drive.
-            </p>
-            <Link to="/about" className="inline-flex items-center gap-2 font-sans text-sm font-semibold text-[#33FF67] hover:underline">
-              Read complete summit background &amp; how it works <ArrowRight size={14} />
-            </Link>
-          </div>
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function Cie() {
-  return (
-    <section className="border-t border-white/20 bg-[#151515] py-20 brochure-grid-dense">
-      <Container className="grid gap-10 md:grid-cols-12 md:items-start">
-        <div className="md:col-span-4 border-r border-white/20 pr-6">
-          <span className="font-mono text-xs uppercase tracking-wider text-[#7484FE] font-bold">Est. 2015</span>
-          <p className="font-display-title mt-2 text-6xl text-[#33FF67]">CIE</p>
-          <p className="font-sans text-sm text-[#F7F2F6]/70 mt-3">Centre for Innovation &amp; Entrepreneurship · MLRIT</p>
-        </div>
-        <div className="md:col-span-8">
-          <Eyebrow index="06">The Organisers</Eyebrow>
-          <h2 className="font-display-title mt-4 text-3xl md:text-4xl uppercase text-[#F7F2F6]">
-            Nurturing Next-Generation Innovators
-          </h2>
-          <p className="mt-4 font-sans text-base text-[#F7F2F6]/75 leading-relaxed">
-            Established in 2015, CIE supports entrepreneurship development, early-stage ventures, and the startup ecosystem at MLRIT. The Internship Drive is engineered to place emerging talent into high-impact environments.
-          </p>
         </div>
       </Container>
     </section>
