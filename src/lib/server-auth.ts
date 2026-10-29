@@ -292,21 +292,42 @@ export interface StudentSubmitApplicationPayload {
   studentToken: string;
   internshipIds: string[];
   resumePath: string | null;
+  fullName?: string | undefined;
+  contactNumber?: string | undefined;
+  email?: string | undefined;
+  instituteAndBranch?: string | undefined;
+  videoUrl?: string | undefined; // Google Drive link input
+  skills?: string | undefined;
+  portfolioUrl?: string | undefined; // Optional
+  availability?: string | undefined;
 }
 
 /**
  * Server function: Securely validates candidate session and submits application(s).
- * Uses elevated service role client to bypass broken RLS policy on applications table.
+ * Handles the 10 core fields of Equinox Career Connect, stores the resume & Google Drive link,
+ * and maintains backward-compatible fallback for Supabase schema variations.
  */
 export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentSubmitApplicationPayload) => data)
   .handler(async ({ data }) => {
-    const { studentToken, internshipIds, resumePath } = data;
+    const {
+      studentToken,
+      internshipIds,
+      resumePath,
+      fullName,
+      contactNumber,
+      instituteAndBranch,
+      videoUrl,
+      skills,
+      portfolioUrl,
+      availability,
+    } = data;
+
     if (!studentToken) {
       throw new Error("Authentication required. Please log in.");
     }
     if (!internshipIds || internshipIds.length === 0) {
-      throw new Error("No internships selected.");
+      throw new Error("No internship selected.");
     }
 
     const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(studentToken);
@@ -316,33 +337,55 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
 
     const userId = authData.user.id;
     const serverClient = getServerSupabase();
+    const meta = authData.user.user_metadata || {};
 
-    // 1. Ensure student profile exists in students table
-    const { data: student } = await serverClient
-      .from("students")
-      .select("id, resume_url")
-      .eq("user_id", userId)
-      .maybeSingle();
+    // 1. Update/upsert student details in public.students table
+    const cleanSkills = skills
+      ? skills
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : Array.isArray(meta?.["skills"])
+      ? meta["skills"]
+      : [];
 
-    if (!student) {
-      const meta = authData.user.user_metadata;
-      await serverClient.from("students").insert({
-        user_id: userId,
-        full_name: (meta?.["full_name"] as string | undefined) || "Applicant",
-        college: (meta?.["college"] as string | undefined) || "Unknown",
-        team_code: ((meta?.["team_code"] as string | undefined) || "EQX-APP").toUpperCase(),
-        mobile: (meta?.["mobile"] as string | undefined) || "N/A",
-        resume_url: resumePath,
-      });
-    } else if (resumePath) {
-      try {
-        await serverClient.from("students").update({ resume_url: resumePath }).eq("user_id", userId);
-      } catch (e) {
-        console.warn("Could not sync resume_url to student profile:", e);
-      }
+    const studentUpdatePayload: Record<string, unknown> = {
+      user_id: userId,
+      full_name: fullName || (meta?.["full_name"] as string | undefined) || "Applicant",
+      college: instituteAndBranch || (meta?.["college"] as string | undefined) || "Unknown",
+      team_code: ((meta?.["team_code"] as string | undefined) || "EQX-APP").toUpperCase(),
+      mobile: contactNumber || (meta?.["mobile"] as string | undefined) || "N/A",
+      skills: cleanSkills,
+    };
+    if (resumePath) {
+      studentUpdatePayload["resume_url"] = resumePath;
     }
 
-    // 2. Filter out already applied internships to prevent unique constraint errors
+    try {
+      await serverClient.from("students").upsert(studentUpdatePayload, { onConflict: "user_id" });
+    } catch (e) {
+      console.warn("Could not upsert student profile:", e);
+    }
+
+    // 2. Also keep user_metadata updated with application fields including video link
+    try {
+      await serverClient.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          ...meta,
+          full_name: fullName || meta?.["full_name"],
+          mobile: contactNumber || meta?.["mobile"],
+          college: instituteAndBranch || meta?.["college"],
+          video_url: videoUrl,
+          skills: cleanSkills,
+          portfolio_url: portfolioUrl,
+          availability: availability,
+        },
+      });
+    } catch (e) {
+      console.warn("Could not sync user_metadata:", e);
+    }
+
+    // 3. Filter out already applied internships to prevent unique constraint errors
     const { data: existingApps } = await serverClient
       .from("applications")
       .select("internship_id")
@@ -362,21 +405,46 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       };
     }
 
-    // 3. Insert application records using student_id = userId (matching foreign key to auth.users.id)
-    const rowsToInsert = newInternshipIds.map((internshipId) => ({
+    // 4. Insert application records
+    // First try full row with new fields (video_url, skills, portfolio_url, availability)
+    const fullRows = newInternshipIds.map((internshipId) => ({
       student_id: userId,
       internship_id: internshipId,
       status: "submitted",
       resume_url: resumePath,
+      video_url: videoUrl || null,
+      skills: skills || null,
+      portfolio_url: portfolioUrl || null,
+      availability: availability || null,
     }));
 
-    const { data: inserted, error: insertError } = await serverClient
+    let inserted: Array<{ id: string; internship_id: string }> | null = null;
+    const { data: fullInsert, error: fullError } = await serverClient
       .from("applications")
-      .insert(rowsToInsert)
+      .insert(fullRows)
       .select("id, internship_id");
 
-    if (insertError) {
-      throw new Error(`Failed to submit application: ${insertError.message}`);
+    if (!fullError && fullInsert) {
+      inserted = fullInsert;
+    } else {
+      // Fallback: If table does not yet have newly migrated columns, insert base application row
+      console.warn("Full insert note, attempting base insert fallback:", fullError?.message);
+      const baseRows = newInternshipIds.map((internshipId) => ({
+        student_id: userId,
+        internship_id: internshipId,
+        status: "submitted",
+        resume_url: resumePath,
+      }));
+
+      const { data: baseInsert, error: baseError } = await serverClient
+        .from("applications")
+        .insert(baseRows)
+        .select("id, internship_id");
+
+      if (baseError) {
+        throw new Error(`Failed to submit application: ${baseError.message}`);
+      }
+      inserted = baseInsert;
     }
 
     const successfulIds = (inserted || []).map((row) => row.internship_id);

@@ -22,6 +22,7 @@ import {
   type Opportunity,
   type BatchApplicationResult,
 } from "@/lib/api";
+import { StudentApplicationForm } from "@/components/site/StudentApplicationForm";
 import { INTERNSHIP_CATEGORIES, type InternshipTrack } from "@/data/site";
 
 export const Route = createFileRoute("/internships/")({
@@ -313,7 +314,18 @@ function Internships() {
               </div>
             )}
           </div>
-          <p className="eyebrow text-[#7484FE]">Sorted by · newest</p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setIsApplyModalOpen(true);
+              }}
+              className="btn btn-signal h-8 px-4 text-xs font-bold"
+            >
+              Apply for Internship
+            </button>
+            <p className="eyebrow text-[#7484FE]">Sorted by · newest</p>
+          </div>
         </div>
 
         {/* Opportunity Listings */}
@@ -423,15 +435,15 @@ function Internships() {
         </aside>
       )}
 
-      {/* Multi-role Application Modal */}
+      {/* Equinox Career Connect 10-Field Application Modal */}
       {isApplyModalOpen && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
         >
-          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto border border-[#2A2A2A] bg-[#0A0A0A] p-6 text-[#F7F2F6] md:p-8">
+          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border-2 border-white/20 bg-[#151515] p-6 text-[#F7F2F6] md:p-8 shadow-2xl">
             <button
               type="button"
               onClick={() => setIsApplyModalOpen(false)}
@@ -440,132 +452,22 @@ function Internships() {
               <X size={20} />
             </button>
 
-            {batchResult ? (
-              <div className="text-center py-6">
-                <CheckCircle2 className="mx-auto h-12 w-12 text-[#33FF67]" />
-                <h3 className="headline mt-4 text-2xl text-[#F7F2F6]">
-                  Applications Processed!
-                </h3>
-                <div className="mt-4 border border-[#2A2A2A] bg-black p-4 text-left font-mono text-xs space-y-2">
-                  <p className="text-[#33FF67]">
-                    ✓ Successfully submitted: {batchResult.appliedCount} new application(s)
-                  </p>
-                  {batchResult.duplicateCount > 0 && (
-                    <p className="text-[#7484FE]">
-                      ℹ Duplicate prevention: {batchResult.duplicateCount} role(s) already had an
-                      existing application.
-                    </p>
-                  )}
-                  <p className="text-[#F7F2F6]/60 pt-2 border-t border-[#2A2A2A]">
-                    Each application record has an independent status tracked by partner
-                    evaluators.
-                  </p>
-                </div>
+            <div className="mb-5 border-b border-white/10 pb-3">
+              <span className="font-mono text-xs font-bold text-[#7484FE] uppercase tracking-wider">
+                Equinox Career Connect
+              </span>
+              <h2 id="modal-title" className="font-display mt-1 text-2xl text-[#F7F2F6]">
+                Student Application Form
+              </h2>
+            </div>
 
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                  <Link to="/dashboard/student" className="btn btn-signal h-10 px-6">
-                    Go to Applications Dashboard <ArrowRight size={14} className="ml-1" />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setIsApplyModalOpen(false)}
-                    className="btn btn-line h-10 px-6"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="pulse-dot h-2 w-2 rounded-full bg-[#33FF67]" />
-                  <p className="font-mono text-xs font-bold tracking-widest text-[#7484FE] uppercase">
-                    Multi-Role Application
-                  </p>
-                </div>
-                <h2 id="modal-title" className="headline mt-2 text-2xl md:text-3xl">
-                  Submit Applications
-                </h2>
-                <p className="mt-2 text-xs text-[#F7F2F6]/60">
-                  You are submitting applications for {selectedOpportunities.length} internship role
-                  (s). Separate records will be created for each role.
-                </p>
-
-                {/* Selected Roles List */}
-                <div className="mt-4 max-h-40 overflow-y-auto border border-[#2A2A2A] bg-black p-3 divide-y divide-[#2A2A2A]">
-                  {selectedOpportunities.map((op) => (
-                    <div key={op.id} className="py-2 flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-bold text-[#F7F2F6]">{op.role}</p>
-                        <p className="font-mono text-[10px] text-[#7484FE]">{op.domain}</p>
-                      </div>
-                      <span className="font-mono text-[10px] text-[#33FF67]">{op.mode}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Resume Upload Input */}
-                <div className="mt-6 border border-[#2A2A2A] bg-black p-4">
-                  <p className="font-mono text-xs font-bold uppercase tracking-wider text-[#F7F2F6]">
-                    Upload Resume *
-                  </p>
-                  <p className="mt-1 text-xs text-[#F7F2F6]/60">
-                    Upload your resume for the selected roles (PDF, DOC, or DOCX, Max 10MB).
-                  </p>
-
-                  <div className="mt-4">
-                    <input
-                      type="file"
-                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setCustomResume(file);
-                        setBatchError(null);
-                      }}
-                      className="block w-full text-xs text-[#F7F2F6] file:mr-4 file:border-0 file:bg-[#7484FE] file:px-4 file:py-2 file:font-mono file:text-xs file:font-bold file:text-black hover:file:bg-[#7484FE]/80"
-                    />
-                    {customResume && (
-                      <p className="mt-2 font-mono text-[11px] text-[#33FF67]">
-                        Selected: {customResume.name} ({(customResume.size / 1024 / 1024).toFixed(2)} MB)
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {batchError && (
-                  <div className="mt-4 flex items-center gap-2 border-l-2 border-destructive bg-destructive/10 p-3 text-xs text-destructive">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{batchError}</span>
-                  </div>
-                )}
-
-                <div className="mt-6 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    disabled={isSubmittingBatch}
-                    onClick={() => setIsApplyModalOpen(false)}
-                    className="btn btn-line h-10 px-4 text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmittingBatch}
-                    onClick={handleBatchApply}
-                    className="btn btn-signal h-10 px-6 text-xs font-bold disabled:opacity-50"
-                  >
-                    {isSubmittingBatch ? (
-                      <span className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Submitting...
-                      </span>
-                    ) : (
-                      `Submit ${selectedOpportunities.length} Application(s)`
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
+            <StudentApplicationForm
+              initialRoleId={Array.from(selectedIds)[0]}
+              onSuccess={() => {
+                clearSelection();
+              }}
+              onCancel={() => setIsApplyModalOpen(false)}
+            />
           </div>
         </div>
       )}

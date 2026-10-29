@@ -39,12 +39,29 @@ export interface Opportunity {
   company?: string;
 }
 
+export interface StudentApplicationFormData {
+  fullName: string;
+  contactNumber: string;
+  email: string;
+  instituteAndBranch: string;
+  preferredRole: string; // internshipId
+  resumeFile: File;
+  videoUrl: string; // Google Drive self-introduction video link
+  relevantSkills: string;
+  portfolioUrl?: string | undefined; // Optional: Projects / Portfolio / GitHub / LinkedIn
+  availability: string;
+}
+
 export interface StudentApplication {
   id: string;
   internship_id: string;
   status: string;
   created_at: string;
   resume_url?: string | null;
+  video_url?: string | null;
+  skills?: string | null;
+  portfolio_url?: string | null;
+  availability?: string | null;
   internship?: {
     id: string;
     role: string;
@@ -274,6 +291,65 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
 }
 
 /**
+ * Equinox Career Connect 10-field student application submission.
+ * Validates the 10 fields, uploads the resume to the private storage bucket,
+ * and records the application with Google Drive self-introduction video link in Supabase.
+ */
+export async function submitStudentApplication(
+  form: StudentApplicationFormData
+): Promise<{ alreadyApplied: boolean; success: boolean }> {
+  if (!form.fullName.trim()) throw new Error("Full Name is required.");
+  if (!form.contactNumber.trim()) throw new Error("Contact Number is required.");
+  if (!form.email.trim()) throw new Error("Email Address is required.");
+  if (!form.instituteAndBranch.trim()) throw new Error("Institute Name and Current Course / Branch is required.");
+  if (!form.preferredRole.trim()) throw new Error("Please select your Preferred Internship Role.");
+  if (!form.resumeFile) throw new Error("Resume / CV file upload is required.");
+  if (!form.videoUrl.trim()) throw new Error("One-Minute Self-Introduction Video Google Drive link is required.");
+  if (!form.relevantSkills.trim()) throw new Error("Relevant Skills are required.");
+  if (!form.availability.trim()) throw new Error("Internship Availability is required.");
+
+  // Validate Google Drive link or video URL
+  const cleanVideoUrl = form.videoUrl.trim();
+  if (!cleanVideoUrl.startsWith("http://") && !cleanVideoUrl.startsWith("https://")) {
+    throw new Error("Please enter a valid link for the self-introduction video (e.g. https://drive.google.com/...).");
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token || !session?.user) {
+    throw new Error("Please log in to your student account before submitting the application.");
+  }
+
+  // 1. Upload resume to private 'resumes' storage bucket
+  const resumePath = await uploadResumeFile(session.user.id, form.resumeFile);
+
+  // 2. Submit application record with video link and student data
+  const result = await studentSubmitApplicationServerFn({
+    data: {
+      studentToken: session.access_token,
+      internshipIds: [form.preferredRole],
+      resumePath,
+      fullName: form.fullName.trim(),
+      contactNumber: form.contactNumber.trim(),
+      email: form.email.trim(),
+      instituteAndBranch: form.instituteAndBranch.trim(),
+      videoUrl: cleanVideoUrl,
+      skills: form.relevantSkills.trim(),
+      portfolioUrl: form.portfolioUrl?.trim() || undefined,
+      availability: form.availability.trim(),
+    },
+  });
+
+  if (result.duplicateCount > 0 && result.appliedCount === 0) {
+    return { alreadyApplied: true, success: false };
+  }
+
+  return { alreadyApplied: false, success: true };
+}
+
+/**
  * Submit a single internship application for the currently authenticated student.
  * Supports reusing the student's profile resume or uploading a custom resume for this specific role.
  */
@@ -375,7 +451,12 @@ export async function getStudentApplications(): Promise<StudentApplication[]> {
     return [];
   }
 
-  return (data as unknown as StudentApplication[]) || [];
+  const metaVideoUrl = (user.user_metadata as Record<string, unknown> | undefined)?.["video_url"] as string | undefined;
+
+  return (data || []).map((app: any) => ({
+    ...app,
+    video_url: app.video_url || metaVideoUrl || null,
+  })) as StudentApplication[];
 }
 
 /**

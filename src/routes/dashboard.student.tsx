@@ -166,28 +166,43 @@ function StudentDashboard() {
                       <span>UPLOADED</span>
                     </div>
 
-                    {/* View Resume Button */}
-                    {app.resume_url && (
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadResume(app.id, app.resume_url)}
-                        disabled={downloadingId === app.id}
-                        className="btn btn-line h-8 px-3 text-xs font-mono"
-                      >
-                        {downloadingId === app.id ? (
-                          <>
-                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                            <span>Opening...</span>
-                          </>
-                        ) : (
-                          <>
-                            <FileText className="mr-1.5 h-3.5 w-3.5 text-[#33FF67]" />
-                            <span>View Resume</span>
-                            <Download className="ml-1.5 h-3.5 w-3.5 opacity-60" />
-                          </>
-                        )}
-                      </button>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* View Intro Video Button */}
+                      {app.video_url && (
+                        <a
+                          href={app.video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-line h-8 px-3 text-xs font-mono"
+                        >
+                          <span>Video Link</span>
+                          <ArrowRight className="ml-1 h-3.5 w-3.5 opacity-60" />
+                        </a>
+                      )}
+
+                      {/* View Resume Button */}
+                      {app.resume_url && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadResume(app.id, app.resume_url)}
+                          disabled={downloadingId === app.id}
+                          className="btn btn-line h-8 px-3 text-xs font-mono"
+                        >
+                          {downloadingId === app.id ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              <span>Opening...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="mr-1.5 h-3.5 w-3.5 text-[#33FF67]" />
+                              <span>View Resume</span>
+                              <Download className="ml-1.5 h-3.5 w-3.5 opacity-60" />
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

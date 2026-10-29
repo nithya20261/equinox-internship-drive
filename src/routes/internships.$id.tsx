@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Lock, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
-import { Container, Eyebrow, TbaBadge } from "@/components/site/primitives";
 import { useAuth } from "@/lib/auth";
-import { getOpportunityById, submitApplication, type Opportunity } from "@/lib/api";
+import { Container, Eyebrow, TbaBadge } from "@/components/site/primitives";
+import { getOpportunityById, type Opportunity } from "@/lib/api";
+import { StudentApplicationForm } from "@/components/site/StudentApplicationForm";
 
 export const Route = createFileRoute("/internships/$id")({
   head: () => ({
@@ -24,11 +25,6 @@ function Detail() {
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [isLoading, setIsLoading] = useState(id !== "preview");
-  const [isApplying, setIsApplying] = useState(false);
-  const [applySuccess, setApplySuccess] = useState<string | null>(null);
-  const [applyError, setApplyError] = useState<string | null>(null);
-
-  const [customResume, setCustomResume] = useState<File | null>(null);
 
   useEffect(() => {
     if (id && id !== "preview") {
@@ -72,33 +68,7 @@ function Detail() {
     );
   }
 
-  const handleApply = async () => {
-    if (!id || id === "preview") return;
-    setApplyError(null);
-    setApplySuccess(null);
 
-    if (!customResume) {
-      setApplyError("Please select a resume file to upload (PDF, DOC, or DOCX).");
-      return;
-    }
-
-    try {
-      setIsApplying(true);
-      const res = await submitApplication(id, {
-        customResume,
-      });
-      if (res.alreadyApplied) {
-        setApplySuccess("You have already applied for this role! Check your Student Dashboard to track status.");
-      } else {
-        setApplySuccess("Application successfully submitted! Your profile and resume have been forwarded.");
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to submit application. Please try again.";
-      setApplyError(msg);
-    } finally {
-      setIsApplying(false);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -215,81 +185,24 @@ function Detail() {
             </dl>
 
             <div className="border-t border-foreground p-5 space-y-4">
-              {applySuccess ? (
-                <div className="border border-[#33FF67] bg-[#33FF67]/10 p-4 text-xs">
-                  <div className="flex items-center gap-2 font-bold text-[#33FF67]">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Application Submitted</span>
-                  </div>
-                  <p className="mt-1 text-foreground/80">{applySuccess}</p>
-                  <Link
-                    to="/dashboard/student"
-                    className="btn btn-signal mt-3 w-full text-xs"
-                  >
-                    View in Dashboard
-                  </Link>
-                </div>
-              ) : (
+              <div className="border-b border-white/10 pb-2">
+                <span className="font-mono text-[11px] font-bold text-[#7484FE] uppercase tracking-wider">
+                  Equinox Career Connect
+                </span>
+                <h3 className="font-display text-lg text-[#F7F2F6]">Apply for this Role</h3>
+              </div>
+
+              {id === "preview" ? (
                 <>
-                  {applyError && (
-                    <div className="border border-destructive bg-destructive/10 p-3 text-xs text-destructive">
-                      {applyError}
-                    </div>
-                  )}
-
-                  {id === "preview" ? (
-                    <>
-                      <button className="btn btn-signal w-full opacity-60" disabled>
-                        Apply (Preview Mode)
-                      </button>
-                      <p className="text-center text-xs text-muted-foreground">
-                        Applications open when live listings are published.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      {/* Direct resume upload */}
-                      <div className="border border-white/20 bg-black/60 p-4 space-y-2 rounded">
-                        <label className="block text-xs font-mono uppercase text-foreground">
-                          Upload Resume <span className="text-[#33FF67]">*</span>
-                        </label>
-                        <p className="text-[11px] text-muted-foreground">
-                          PDF, DOC, or DOCX (max 10MB)
-                        </p>
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          onChange={(e) => setCustomResume(e.target.files?.[0] || null)}
-                          className="w-full text-xs text-foreground file:mr-3 file:border-0 file:bg-[#7484FE] file:px-3 file:py-1.5 file:font-mono file:text-xs file:font-bold file:text-black file:cursor-pointer cursor-pointer"
-                        />
-                        {customResume && (
-                          <p className="text-xs font-mono text-[#33FF67] pt-1">
-                            ✓ {customResume.name} ({(customResume.size / (1024 * 1024)).toFixed(2)} MB)
-                          </p>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={handleApply}
-                        disabled={isApplying || !isStudent}
-                        className="btn btn-signal w-full disabled:opacity-50"
-                      >
-                        {isApplying ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Submitting...
-                          </span>
-                        ) : isStudent ? (
-                          "Submit Application"
-                        ) : (
-                          "Apply (Student Account Required)"
-                        )}
-                      </button>
-                      <p className="text-center text-xs text-muted-foreground">
-                        Your application will be marked as uploaded and sent directly for evaluation.
-                      </p>
-                    </>
-                  )}
+                  <button className="btn btn-signal w-full opacity-60" disabled>
+                    Apply (Preview Mode)
+                  </button>
+                  <p className="text-center text-xs text-muted-foreground">
+                    Applications open when live listings are published.
+                  </p>
                 </>
+              ) : (
+                <StudentApplicationForm initialRoleId={id} />
               )}
             </div>
           </div>
