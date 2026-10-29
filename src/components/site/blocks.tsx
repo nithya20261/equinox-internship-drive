@@ -141,6 +141,134 @@ export function OpportunitySlot({
   );
 }
 
+/** Card representation of an internship opportunity for 4-in-a-row grids */
+export function OpportunityCard({
+  n = 1,
+  item,
+  isLoggedIn = false,
+  selectable = false,
+  isSelected = false,
+  onToggleSelect,
+}: {
+  n?: number;
+  item?: Opportunity;
+  isLoggedIn?: boolean;
+  selectable?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+}) {
+  const roles = [
+    { title: "AI Systems & Infrastructure Intern", domain: "Artificial Intelligence", mode: "On-Campus" },
+    { title: "Full-Stack Web3 / Cloud Intern", domain: "Cloud & Distributed Systems", mode: "On-Campus" },
+    { title: "Embedded & Edge Computing Intern", domain: "IoT & Hardware", mode: "On-Campus" },
+    { title: "Cybersecurity & Risk Analyst Intern", domain: "Information Security", mode: "On-Campus" },
+  ];
+  const defaultRole = roles[(n - 1) % roles.length] ?? roles[0]!;
+
+  const title = item?.role || defaultRole.title;
+  const domain = item?.domain || defaultRole.domain;
+  const location = item?.location || "MLRIT Campus";
+  const mode = item?.mode || defaultRole.mode;
+  const detailId = item?.id || "preview";
+
+  const skills: string[] = Array.isArray(item?.skills)
+    ? item.skills
+    : typeof item?.skills === "string"
+    ? item.skills.split(/[,•]/).map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  return (
+    <article
+      className={`group relative flex flex-col justify-between rounded-2xl border-2 border-white/20 bg-[#1e1e1e] p-5 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs transition hover:border-[#7484FE] hover:-translate-y-1 duration-200 ${
+        isSelected ? "ring-2 ring-[#7484FE] bg-[#242424]" : ""
+      }`}
+    >
+      <div>
+        {/* Top Header: Badge, Shield & Multi-select */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-[#151515] font-mono text-xs font-black text-[#7484FE]">
+              {String(n).padStart(2, "0")}
+            </div>
+            <div className="flex items-center gap-1 font-mono text-[10px] font-bold text-[#7484FE] uppercase">
+              <Shield className="h-3 w-3 text-[#33FF67]" />
+              <span>Shielded</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[#151515] px-2 py-0.5 font-mono text-[10px] text-[#7484FE]">
+              <Lock className="h-2.5 w-2.5" /> Confidential
+            </span>
+            {selectable && item?.id ? (
+              <label
+                className="relative flex cursor-pointer items-center justify-center p-0.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => onToggleSelect?.()}
+                  className="h-4 w-4 rounded border border-white/30 bg-[#151515] accent-[#33FF67] cursor-pointer"
+                  aria-label={`Select ${title}`}
+                />
+              </label>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Role Title */}
+        <h3 className="font-sans mt-3 text-base font-bold text-[#F7F2F6] group-hover:text-[#33FF67] transition-colors line-clamp-2 min-h-[3rem]">
+          {title}
+        </h3>
+
+        {/* Specs Badges: Domain, Mode, Location */}
+        <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[11px]">
+          <span className="rounded border border-white/10 bg-[#151515] px-2 py-0.5 text-[#F7F2F6]/80 truncate max-w-full">
+            {domain}
+          </span>
+          <span className="rounded border border-white/10 bg-[#151515] px-2 py-0.5 text-[#33FF67] font-semibold">
+            {mode}
+          </span>
+          <span className="rounded border border-white/10 bg-[#151515] px-2 py-0.5 text-[#7484FE]">
+            {location}
+          </span>
+        </div>
+
+        {/* Skills Chips */}
+        {skills.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {skills.slice(0, 3).map((sk, idx) => (
+              <span
+                key={idx}
+                className="rounded border border-white/10 bg-[#151515] px-1.5 py-0.5 font-mono text-[10px] text-[#F7F2F6]/70"
+              >
+                {sk}
+              </span>
+            ))}
+            {skills.length > 3 && (
+              <span className="self-center font-mono text-[10px] text-[#F7F2F6]/40">
+                +{skills.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Options to View the Role (Below) */}
+      <div className="mt-5 pt-3 border-t border-white/10">
+        <Link
+          to="/internships/$id"
+          params={{ id: detailId }}
+          className="btn btn-signal w-full h-9 text-xs font-bold justify-center flex items-center gap-1.5 rounded-xl shadow-md"
+        >
+          View Role <ArrowRight size={13} />
+        </Link>
+      </div>
+    </article>
+  );
+}
+
 export function ListingAnatomy() {
   return (
     <div className="flex flex-wrap gap-2">

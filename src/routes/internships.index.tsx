@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { pageMeta } from "@/lib/seo";
 import { Container, EmptyState, PageHero } from "@/components/site/primitives";
-import { OpportunitySlot } from "@/components/site/blocks";
+import { OpportunityCard, OpportunitySlot } from "@/components/site/blocks";
 import { useAuth } from "@/lib/auth";
 import {
   getOpportunities,
@@ -186,7 +186,7 @@ function Internships() {
         one seamless session with your choice of resume.
       </PageHero>
 
-      <Container className="py-14">
+      <Container className="max-w-[1440px] py-14">
         {/* Auth notice banner when not logged in */}
         {!isLoggedIn && (
           <div className="mb-10 flex flex-col items-start justify-between gap-4 rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs sm:flex-row sm:items-center">
@@ -334,9 +334,9 @@ function Internships() {
             <Loader2 className="h-8 w-8 animate-spin text-[#33FF67]" />
           </div>
         ) : filtered.length > 0 ? (
-          <div className="mt-8 border-t border-[#2A2A2A]">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {filtered.map((item, idx) => (
-              <OpportunitySlot
+              <OpportunityCard
                 key={item.id}
                 n={idx + 1}
                 item={item}
@@ -374,9 +374,9 @@ function Internships() {
             )}
           </div>
 
-          <div className="border-t border-[#2A2A2A] opacity-70">
-            {[1, 2].map((n) => (
-              <OpportunitySlot key={n} n={n} isLoggedIn={isLoggedIn} />
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 opacity-75">
+            {[1, 2, 3, 4].map((n) => (
+              <OpportunityCard key={n} n={n} isLoggedIn={isLoggedIn} />
             ))}
           </div>
 
