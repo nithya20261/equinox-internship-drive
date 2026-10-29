@@ -6,6 +6,11 @@ import {
   studentSubmitApplicationServerFn,
   registerStudentServerFn,
   adminCreateOrUpdateRoleServerFn,
+  adminDeleteRoleServerFn,
+  adminGetRolesServerFn,
+  adminAddConfirmedStudentServerFn,
+  adminGetConfirmedStudentsServerFn,
+  adminGetApplicationsServerFn,
 } from "./server-auth";
 
 const RESUME_BUCKET = "resumes";
@@ -294,6 +299,23 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
 }
 
 /**
+ * Admin action to fetch all internships directly from Supabase.
+ */
+export async function adminGetRoles(): Promise<any[]> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminGetRolesServerFn({
+    data: { adminToken: session.access_token },
+  });
+}
+
+/**
  * Admin action to manually add or update role details in Supabase.
  */
 export async function adminCreateOrUpdateRole(roleData: {
@@ -302,10 +324,13 @@ export async function adminCreateOrUpdateRole(roleData: {
   domain: string;
   location?: string | undefined;
   mode?: string | undefined;
+  duration?: string | undefined;
+  salary?: string | undefined;
   description?: string | undefined;
   responsibilities?: string[] | undefined;
   skills?: string[] | undefined;
   eligibility?: string | undefined;
+  status?: string | undefined;
 }) {
   const {
     data: { session },
@@ -320,6 +345,85 @@ export async function adminCreateOrUpdateRole(roleData: {
       adminToken: session.access_token,
       ...roleData,
     },
+  });
+}
+
+/**
+ * Admin action to permanently delete an internship role.
+ */
+export async function adminDeleteRole(id: string) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminDeleteRoleServerFn({
+    data: {
+      adminToken: session.access_token,
+      id,
+    },
+  });
+}
+
+/**
+ * Admin action to add a new confirmed student CNF number and grant login access immediately.
+ */
+export async function adminAddConfirmedStudent(studentData: {
+  cnfNumber: string;
+  fullName: string;
+  college?: string;
+  mobile?: string;
+}) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminAddConfirmedStudentServerFn({
+    data: {
+      adminToken: session.access_token,
+      ...studentData,
+    },
+  });
+}
+
+/**
+ * Admin action to retrieve confirmed students (from DB and preloaded master list).
+ */
+export async function adminGetConfirmedStudents() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminGetConfirmedStudentsServerFn({
+    data: { adminToken: session.access_token },
+  });
+}
+
+/**
+ * Admin action to retrieve candidate applications.
+ */
+export async function adminGetApplications() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminGetApplicationsServerFn({
+    data: { adminToken: session.access_token },
   });
 }
 

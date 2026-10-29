@@ -362,34 +362,6 @@ function Internships() {
             />
           </div>
         )}
-
-        {/* Preview and structural exploration */}
-        <div className="mt-16">
-          <div className="flex items-center justify-between">
-            <p className="eyebrow mb-4 text-[#F7F2F6]/50">Listing preview — structure only</p>
-            {!isLoggedIn && (
-              <span className="eyebrow mb-4 flex items-center gap-1.5 text-xs text-[#33FF67]">
-                <Lock size={12} /> Details locked
-              </span>
-            )}
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 opacity-75">
-            {[1, 2, 3, 4].map((n) => (
-              <OpportunityCard key={n} n={n} isLoggedIn={isLoggedIn} />
-            ))}
-          </div>
-
-          {isLoggedIn ? (
-            <Link to="/internships/$id" params={{ id: "preview" }} className="btn btn-line mt-8">
-              Preview a detail page <ArrowRight size={16} />
-            </Link>
-          ) : (
-            <Link to="/login" className="btn btn-signal mt-8">
-              <Lock size={16} /> Log in to view opportunity details <ArrowRight size={16} />
-            </Link>
-          )}
-        </div>
       </Container>
 
       {/* Floating Batch Selection Dock */}

@@ -142,7 +142,26 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentAuthPayload) => data)
   .handler(async ({ data }) => {
     const rawCnf = (data.cnfNumber || data.teamCode || "").trim().toUpperCase();
-    const confirmedStudent = getConfirmedStudent(rawCnf);
+    const serverClient = getServerSupabase();
+
+    // 1. Check pre-loaded master confirmed list
+    let confirmedStudent = getConfirmedStudent(rawCnf);
+
+    // 2. If not in static list, check database students table (for dynamically added CNFs by admin)
+    if (!confirmedStudent) {
+      const { data: dbStudent } = await serverClient
+        .from("students")
+        .select("full_name, team_code")
+        .ilike("team_code", rawCnf)
+        .maybeSingle();
+
+      if (dbStudent?.team_code && dbStudent?.full_name) {
+        confirmedStudent = {
+          cnf: dbStudent.team_code.toUpperCase(),
+          name: dbStudent.full_name,
+        };
+      }
+    }
 
     if (!confirmedStudent) {
       throw new Error(
@@ -161,7 +180,6 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
     await verifyDurableRateLimit(rateLimitKey);
 
     const studentEmail = `${confirmedStudent.cnf.toLowerCase()}@equinox.mlrit.ac.in`;
-    const serverClient = getServerSupabase();
     const anonClient = getServerAnonClient();
 
     let authUserSession: { session: any; user: any } | null = null;
@@ -618,10 +636,13 @@ export interface AdminRolePayload {
   domain: string;
   location?: string | undefined;
   mode?: string | undefined;
+  duration?: string | undefined;
+  salary?: string | undefined;
   description?: string | undefined;
   responsibilities?: string[] | undefined;
   skills?: string[] | undefined;
   eligibility?: string | undefined;
+  status?: string | undefined;
 }
 
 /**
@@ -654,21 +675,30 @@ export const adminCreateOrUpdateRoleServerFn = createServerFn({ method: "POST" }
     const { data: company } = await serverClient.from("companies").select("id").limit(1).maybeSingle();
     const companyId = company?.id || "8adf0d6d-de90-4838-82d6-e111b29b12c5";
 
+    const normalizeMode = (m?: string): "onsite" | "hybrid" | "remote" => {
+      const lower = (m || "").toLowerCase().trim();
+      if (lower.includes("remote")) return "remote";
+      if (lower.includes("hybrid")) return "hybrid";
+      return "onsite";
+    };
+
     const rolePayload: Record<string, unknown> = {
       role: data.role.trim(),
       domain: data.domain.trim(),
-      location: data.location?.trim() || "MLRIT Campus",
-      mode: data.mode?.trim() || "On-Campus",
+      location: data.location?.trim() || "MLRIT Campus / Hyderabad",
+      mode: normalizeMode(data.mode),
+      duration: data.duration?.trim() || "3 - 6 Months",
+      salary: data.salary?.trim() || "Commensurate with performance",
       description: data.description?.trim() || "",
       responsibilities: data.responsibilities || [],
       skills: data.skills || [],
       eligibility: data.eligibility?.trim() || "Open to all registered Equinox attendees",
-      status: "open",
+      status: data.status?.trim().toLowerCase() === "closed" ? "closed" : "open",
       company_id: companyId,
       updated_at: new Date().toISOString(),
     };
 
-    if (data.id && data.id !== "preview") {
+    if (data.id && data.id !== "preview" && data.id !== "new") {
       const { data: updated, error: updateError } = await serverClient
         .from("internships")
         .update(rolePayload)
@@ -692,5 +722,247 @@ export const adminCreateOrUpdateRoleServerFn = createServerFn({ method: "POST" }
       return created;
     }
   });
+
+/**
+ * Server function: Allows administrators to delete an internship role.
+ */
+export const adminDeleteRoleServerFn = createServerFn({ method: "POST" })
+  .validator((data: { adminToken: string; id: string }) => data)
+  .handler(async ({ data }) => {
+    const { adminToken, id } = data;
+    if (!adminToken) throw new Error("Admin authentication required.");
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+
+    const serverClient = getServerSupabase();
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "admin") throw new Error("Unauthorized.");
+
+    // Delete associated applications first to prevent FK constraint error
+    await serverClient.from("applications").delete().eq("internship_id", id);
+
+    const { error: delError } = await serverClient.from("internships").delete().eq("id", id);
+    if (delError) throw new Error(delError.message);
+
+    return { success: true };
+  });
+
+/**
+ * Server function: Allows administrators to fetch all roles directly with applications count.
+ */
+export const adminGetRolesServerFn = createServerFn({ method: "POST" })
+  .validator((data: { adminToken: string }) => data)
+  .handler(async ({ data }) => {
+    const { adminToken } = data;
+    if (!adminToken) throw new Error("Admin authentication required.");
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+
+    const serverClient = getServerSupabase();
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "admin") throw new Error("Unauthorized.");
+
+    const { data: roles, error } = await serverClient
+      .from("internships")
+      .select("*, applications(count)")
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return roles || [];
+  });
+
+/**
+ * Server function: Allows administrators to add a new CNF number and student access.
+ * Immediately creates their Supabase Auth account with password = CNF, and stores their student profile.
+ */
+export const adminAddConfirmedStudentServerFn = createServerFn({ method: "POST" })
+  .validator((data: {
+    adminToken: string;
+    cnfNumber: string;
+    fullName: string;
+    college?: string;
+    mobile?: string;
+  }) => data)
+  .handler(async ({ data }) => {
+    const { adminToken, cnfNumber, fullName, college, mobile } = data;
+    if (!adminToken) throw new Error("Admin authentication required.");
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+
+    const serverClient = getServerSupabase();
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "admin") throw new Error("Unauthorized: Only administrators can add student access.");
+
+    let cleanCnf = cnfNumber.trim().toUpperCase();
+    if (!cleanCnf.startsWith("CNF-") && !cleanCnf.startsWith("CNF")) {
+      cleanCnf = `CNF-${cleanCnf}`;
+    }
+    const cleanName = fullName.trim();
+    if (!cleanCnf || !cleanName) {
+      throw new Error("Confirmation Number and Student Full Name are required.");
+    }
+
+    const studentEmail = `${cleanCnf.toLowerCase()}@equinox.mlrit.ac.in`;
+
+    // 1. Create or update user in Supabase Auth
+    const { data: createdUser, error: createError } = await serverClient.auth.admin.createUser({
+      email: studentEmail,
+      password: cleanCnf,
+      email_confirm: true,
+      user_metadata: {
+        role: "student",
+        full_name: cleanName,
+        team_code: cleanCnf,
+        cnf_number: cleanCnf,
+      },
+    });
+
+    let userId = createdUser?.user?.id;
+    if (!userId && createError?.message.toLowerCase().includes("already")) {
+      const { data: existingProfile } = await serverClient
+        .from("profiles")
+        .select("id")
+        .eq("email", studentEmail)
+        .maybeSingle();
+
+      const profileId = existingProfile?.id;
+      if (profileId) {
+        userId = profileId;
+        await serverClient.auth.admin.updateUserById(profileId, {
+          password: cleanCnf,
+          user_metadata: {
+            role: "student",
+            full_name: cleanName,
+            team_code: cleanCnf,
+            cnf_number: cleanCnf,
+          },
+        });
+      }
+    }
+
+    if (!userId) {
+      throw new Error(createError?.message || "Could not register user account.");
+    }
+
+    // 2. Upsert profile
+    await serverClient.from("profiles").upsert({
+      id: userId,
+      role: "student",
+      email: studentEmail,
+    });
+
+    // 3. Upsert student record
+    await serverClient.from("students").upsert({
+      user_id: userId,
+      full_name: cleanName,
+      team_code: cleanCnf,
+      college: college?.trim() || "MLR Institute of Technology",
+      mobile: mobile?.trim() || "N/A",
+    }, { onConflict: "user_id" });
+
+    return {
+      success: true,
+      cnf: cleanCnf,
+      name: cleanName,
+      email: studentEmail,
+    };
+  });
+
+/**
+ * Server function: Allows administrators to fetch all students (from DB and confirmed list).
+ */
+export const adminGetConfirmedStudentsServerFn = createServerFn({ method: "POST" })
+  .validator((data: { adminToken: string }) => data)
+  .handler(async ({ data }) => {
+    const { adminToken } = data;
+    if (!adminToken) throw new Error("Admin authentication required.");
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+
+    const serverClient = getServerSupabase();
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "admin") throw new Error("Unauthorized.");
+
+    // Fetch database students
+    const { data: dbStudents } = await serverClient
+      .from("students")
+      .select("id, user_id, full_name, team_code, college, mobile, created_at, resume_url")
+      .order("created_at", { ascending: false });
+
+    return {
+      dbStudents: dbStudents || [],
+    };
+  });
+
+/**
+ * Server function: Allows administrators to fetch all candidate applications.
+ */
+export const adminGetApplicationsServerFn = createServerFn({ method: "POST" })
+  .validator((data: { adminToken: string }) => data)
+  .handler(async ({ data }) => {
+    const { adminToken } = data;
+    if (!adminToken) throw new Error("Admin authentication required.");
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+
+    const serverClient = getServerSupabase();
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "admin") throw new Error("Unauthorized.");
+
+    const { data: apps, error } = await serverClient
+      .from("applications")
+      .select(`
+        id,
+        status,
+        resume_url,
+        video_url,
+        skills,
+        portfolio_url,
+        availability,
+        created_at,
+        student_id,
+        internship_id,
+        internship:internships(id, role, domain),
+        student:students(full_name, team_code, college, mobile)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      const { data: fallbackApps } = await serverClient
+        .from("applications")
+        .select("*")
+        .order("created_at", { ascending: false });
+      return fallbackApps || [];
+    }
+
+    return apps || [];
+  });
+
+
 
 

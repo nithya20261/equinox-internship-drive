@@ -54,17 +54,10 @@ export function OpportunitySlot({
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }) {
-  const roles = [
-    { title: "AI Systems & Infrastructure Intern", domain: "Artificial Intelligence", mode: "On-Campus" },
-    { title: "Full-Stack Web3 / Cloud Intern", domain: "Cloud & Distributed Systems", mode: "On-Campus" },
-    { title: "Embedded & Edge Computing Intern", domain: "IoT & Hardware", mode: "On-Campus" },
-  ];
-  const defaultRole = roles[(n - 1) % roles.length] ?? roles[0]!;
-
-  const title = item?.role || defaultRole.title;
-  const domain = item?.domain || defaultRole.domain;
-  const location = item?.location || "MLRIT";
-  const mode = item?.mode || defaultRole.mode;
+  const title = item?.role || "Internship Role";
+  const domain = item?.domain || "General";
+  const location = item?.location || "MLRIT Campus";
+  const mode = item?.mode || "onsite";
   const detailId = item?.id || "preview";
 
   return (
@@ -157,18 +150,10 @@ export function OpportunityCard({
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }) {
-  const roles = [
-    { title: "AI Systems & Infrastructure Intern", domain: "Artificial Intelligence", mode: "On-Campus" },
-    { title: "Full-Stack Web3 / Cloud Intern", domain: "Cloud & Distributed Systems", mode: "On-Campus" },
-    { title: "Embedded & Edge Computing Intern", domain: "IoT & Hardware", mode: "On-Campus" },
-    { title: "Cybersecurity & Risk Analyst Intern", domain: "Information Security", mode: "On-Campus" },
-  ];
-  const defaultRole = roles[(n - 1) % roles.length] ?? roles[0]!;
-
-  const title = item?.role || defaultRole.title;
-  const domain = item?.domain || defaultRole.domain;
+  const title = item?.role || "Internship Opportunity";
+  const domain = item?.domain || "General Domain";
   const location = item?.location || "MLRIT Campus";
-  const mode = item?.mode || defaultRole.mode;
+  const mode = item?.mode || "onsite";
   const detailId = item?.id || "preview";
 
   const skills: string[] = Array.isArray(item?.skills)
