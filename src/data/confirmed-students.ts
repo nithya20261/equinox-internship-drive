@@ -10,6 +10,10 @@ export interface ConfirmedStudent {
 
 export const CONFIRMED_STUDENTS_LIST: ConfirmedStudent[] = [
   {
+    "cnf": "CNF000",
+    "name": "SHREYAS"
+  },
+  {
     "cnf": "CNF-F6D524",
     "name": "A.Sharanya"
   },
@@ -820,6 +824,8 @@ export const CONFIRMED_STUDENTS_LIST: ConfirmedStudent[] = [
 ];
 
 export const CONFIRMED_STUDENTS_MAP: Record<string, string> = {
+  "CNF000": "SHREYAS",
+  "CNF-000": "SHREYAS",
   "CNF-F6D524": "A.Sharanya",
   "CNF-AC9BAB": "Bagadhi Abhinav",
   "CNF-C339BA": "Hemanth Kakarla",

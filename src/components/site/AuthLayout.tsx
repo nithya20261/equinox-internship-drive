@@ -15,13 +15,13 @@ export function AuthLayout({
   return (
     <Container className="py-10 sm:py-14">
       <div className="grid min-h-[75vh] rounded-3xl border-2 border-white/20 overflow-hidden shadow-[6px_6px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs lg:grid-cols-2">
-        <div className="flex flex-col justify-center brochure-grid-dense bg-[#151515] p-8 text-[#F7F2F6] md:p-12 relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
-          <div className="relative z-10">
-            <h1 className="font-display-title font-black text-5xl sm:text-6xl md:text-7xl uppercase tracking-tight text-[#F7F2F6]">
+        <div className="flex flex-col justify-center brochure-grid-dense bg-[#151515] p-6 sm:p-8 md:p-12 text-[#F7F2F6] relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
+          <div className="relative z-10 max-w-full">
+            <h1 className="font-display-title font-black text-3xl sm:text-4xl md:text-5xl uppercase tracking-normal text-[#F7F2F6] break-normal leading-tight">
               {title}
             </h1>
             {aside && (
-              <div className="mt-5 max-w-sm font-sans text-sm text-white/70 leading-relaxed">
+              <div className="mt-4 max-w-sm font-sans text-sm text-white/70 leading-relaxed">
                 {aside}
               </div>
             )}

