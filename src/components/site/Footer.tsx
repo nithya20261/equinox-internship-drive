@@ -1,7 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { EVENT } from "@/data/site";
 import { Container } from "./primitives";
-import { Shield } from "lucide-react";
 
 const LINKS = [
   { to: "/", label: "Home" },
@@ -27,24 +25,6 @@ export function Footer() {
                 className="h-11 sm:h-12 w-auto object-contain"
               />
             </Link>
-
-            <div className="mt-3 flex items-center gap-2">
-              <span className="rounded bg-[#7484FE]/20 border border-[#7484FE]/40 px-2.5 py-0.5 font-mono text-xs font-bold text-[#7484FE] uppercase tracking-wider">
-                Official Sub-Event · Page 06
-              </span>
-              <span className="font-mono text-xs text-[#33FF67] uppercase font-bold tracking-wider">
-                Internship Drive
-              </span>
-            </div>
-
-            <p className="font-sans text-sm text-[#F7F2F6]/70 mt-4 leading-relaxed max-w-md">
-              {EVENT.name} · {EVENT.dates} · MLRIT, {EVENT.city}. Connecting students with high-growth startups and tech companies.
-            </p>
-
-            <div className="mt-6 flex items-center gap-2.5 font-sans text-xs text-[#33FF67] border border-white/10 px-3.5 py-2 w-fit bg-[#2A2A2A]/80 rounded-lg">
-              <Shield className="h-4 w-4 shrink-0 text-[#33FF67]" />
-              <span>Candidate-Shielded Company Confidentiality Protocol</span>
-            </div>
           </div>
 
           <nav aria-label="Footer" className="md:col-span-5">
@@ -66,9 +46,8 @@ export function Footer() {
           </nav>
         </div>
 
-        <div className="mt-16 flex flex-col justify-between gap-3 border-t border-white/10 pt-6 font-sans text-sm text-[#F7F2F6]/50 md:flex-row items-center">
-          <p>Organised by {EVENT.host} · MLRIT Hyderabad.</p>
-          <p>© 2026 Centre for Innovation & Entrepreneurship. All rights reserved.</p>
+        <div className="mt-12 flex flex-col justify-between gap-3 border-t border-white/10 pt-6 font-sans text-sm text-[#F7F2F6]/50 md:flex-row items-center">
+          <p>© 2026 Centre for Innovation &amp; Entrepreneurship. All rights reserved.</p>
         </div>
       </Container>
     </footer>

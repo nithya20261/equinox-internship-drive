@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowRight, Shield, Lock } from "lucide-react";
 import { Container, Eyebrow, Reveal, SectionHead } from "@/components/site/primitives";
-import { Journey, ListingAnatomy } from "@/components/site/blocks";
+import { Journey } from "@/components/site/blocks";
 import { CinematicIntro } from "@/components/site/CinematicIntro";
 import { useAuth } from "@/lib/auth";
 
@@ -89,40 +89,22 @@ function Hero() {
           </div>
         </div>
 
-        {/* Hero Narrative & Action Grid */}
-        <div className="mt-10 grid gap-10 md:grid-cols-12 md:items-end">
-          <div className="md:col-span-7">
-            <p className="text-lg sm:text-xl leading-relaxed text-[#F7F2F6]/90 font-sans">
-              Two days on campus connecting MLRIT students directly with founders and hiring teams.
-              Merit-first evaluation, structured screening, and immediate internship shortlists.
-            </p>
+        {/* Hero Narrative & Action */}
+        <div className="mt-10 max-w-2xl">
+          <p className="text-lg sm:text-xl leading-relaxed text-[#F7F2F6]/90 font-sans">
+            Two days on campus connecting MLRIT students directly with founders and hiring teams.
+            Merit-first evaluation, structured screening, and immediate internship shortlists.
+          </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold">
-                Explore Opportunities <ArrowRight className="h-4 w-4" />
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold">
+              Explore Opportunities <ArrowRight className="h-4 w-4" />
+            </Link>
+            {!isLoggedIn && (
+              <Link to="/login" className="btn btn-line h-11 px-6 text-sm font-semibold">
+                Log in
               </Link>
-              {!isLoggedIn && (
-                <Link to="/login" className="btn btn-line h-11 px-6 text-sm font-semibold">
-                  Log in
-                </Link>
-              )}
-            </div>
-          </div>
-
-          <div className="md:col-span-5 md:col-start-8">
-            <dl className="grid grid-cols-2 border-t border-white/20">
-              {[
-                ["Dates", "30–31 October"],
-                ["Venue", "MLRIT · Hyderabad"],
-                ["Format", "On-Campus Summit"],
-                ["Host", "CIE @ MLRIT"],
-              ].map(([k, v]) => (
-                <div key={k} className="border-b border-white/20 py-3.5 pr-4">
-                  <dt className="font-mono text-xs uppercase tracking-wider text-[#7484FE] font-bold">{k}</dt>
-                  <dd className="font-display-title mt-0.5 text-base sm:text-lg uppercase text-[#F7F2F6]">{v}</dd>
-                </div>
-              ))}
-            </dl>
+            )}
           </div>
         </div>
       </Container>
@@ -179,17 +161,11 @@ function WhatIs() {
                 Students meet <span className="text-[#33FF67]">startups</span> hiring for real internships — at one flagship summit.
               </h2>
             </Reveal>
-            <div className="mt-10 grid gap-8 border-t border-white/20 pt-8 md:grid-cols-2">
+            <div className="mt-8 border-t border-white/20 pt-8 max-w-2xl">
               <p className="font-sans text-base text-[#F7F2F6]/75 leading-relaxed">
                 Organised by the Centre for Innovation &amp; Entrepreneurship at MLRIT, the Internship Drive
                 enables tech and business talent to interact face-to-face with founders and engineering leaders.
               </p>
-              <div>
-                <p className="font-mono text-xs uppercase tracking-wider text-[#7484FE] font-bold mb-3">
-                  Standardised Listing Format
-                </p>
-                <ListingAnatomy />
-              </div>
             </div>
           </div>
         </div>
@@ -203,7 +179,7 @@ function HowItWorks() {
     <section className="py-20 md:py-28 bg-[#2A2A2A] riso-texture">
       <Container>
         <SectionHead index="02" label="How It Works" title="Candidate Journey">
-          Follow the structured five-step path from student registration to on-campus interviews.
+          Follow the structured four-step path from student registration to role applications.
         </SectionHead>
         <div className="mt-12">
           <Journey />

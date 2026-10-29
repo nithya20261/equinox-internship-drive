@@ -29,7 +29,6 @@ export const JOURNEY = [
   { step: "Create Profile", note: "Add your education, skills and resume." },
   { step: "Explore Opportunities", note: "Browse roles from participating startups and companies." },
   { step: "Apply", note: "Submit applications to the roles that fit you." },
-  { step: "Track Application", note: "Follow each application's status from your dashboard." },
 ] as const;
 
 export const DRIVE_STATS = [

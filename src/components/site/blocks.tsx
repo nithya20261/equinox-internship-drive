@@ -6,7 +6,7 @@ import type { Opportunity } from "@/lib/api";
 
 export function Journey() {
   return (
-    <ol className="grid gap-4 md:grid-cols-5">
+    <ol className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
       {JOURNEY.map((j, i) => (
         <li
           key={j.step}
