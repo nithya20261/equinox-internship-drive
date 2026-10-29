@@ -295,7 +295,7 @@ export async function getOpportunities(): Promise<Opportunity[]> {
     const { data } = await supabase
       .from("public_opportunities")
       .select(
-        "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at"
+        "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at, company, requirement, stipend"
       )
       .order("created_at", { ascending: false });
 
@@ -305,7 +305,7 @@ export async function getOpportunities(): Promise<Opportunity[]> {
         .filter((item) => !existingIds.has(item.id))
         .map((item) => ({
           ...item,
-          company: "Partner Organization (Confidential)",
+          company: item.company || "Partner Organization (Confidential)",
         }));
       return [...companyListings, ...dbOps];
     }
@@ -318,7 +318,7 @@ export async function getOpportunities(): Promise<Opportunity[]> {
  * Fetch opportunity by ID.
  */
 export async function getOpportunityById(id: string): Promise<Opportunity | null> {
-  const found = INTERNSHIP_COMPANIES.find((c) => c.id === id);
+  const found = INTERNSHIP_COMPANIES.find((c) => c.id === id || c.legacyId === id);
   if (found) {
     return {
       id: found.id,
@@ -339,7 +339,7 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
   const { data, error } = await supabase
     .from("public_opportunities")
     .select(
-      "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at"
+      "id, role, domain, location, mode, duration, description, responsibilities, skills, eligibility, status, created_at, company, requirement, stipend"
     )
     .eq("id", id)
     .maybeSingle();
@@ -348,7 +348,7 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
 
   return {
     ...data,
-    company: "Partner Organization (Confidential)",
+    company: data.company || "Partner Organization (Confidential)",
   };
 }
 

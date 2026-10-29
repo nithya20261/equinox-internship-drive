@@ -1,5 +1,6 @@
 export interface InternshipListing {
   id: string;
+  legacyId?: string;
   company: string;
   role?: string;
   requirement?: string;
@@ -13,7 +14,8 @@ export interface InternshipListing {
 
 export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   {
-    id: "soaron-aerospace-founder-office",
+    id: "d0000001-0000-0000-0000-000000000001",
+    legacyId: "soaron-aerospace-founder-office",
     company: "Soaron Aerospace",
     role: "Business Executive Intern (Founder's Office)",
     description:
@@ -24,7 +26,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Business Development & Corporate Sales",
   },
   {
-    id: "aethriz-ai-ml-development",
+    id: "d0000002-0000-0000-0000-000000000001",
+    legacyId: "aethriz-ai-ml-development",
     company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
     role: "AI/ML Development",
     description:
@@ -35,7 +38,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Artificial Intelligence & Machine Learning",
   },
   {
-    id: "aethriz-app-development",
+    id: "d0000002-0000-0000-0000-000000000002",
+    legacyId: "aethriz-app-development",
     company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
     role: "App Development",
     description:
@@ -46,7 +50,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Mobile App Development",
   },
   {
-    id: "aethriz-full-stack-web-development",
+    id: "d0000002-0000-0000-0000-000000000003",
+    legacyId: "aethriz-full-stack-web-development",
     company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
     role: "Full-Stack Web Development",
     description:
@@ -57,7 +62,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Full-Stack Web Development",
   },
   {
-    id: "aethriz-social-media-management-marketing",
+    id: "d0000002-0000-0000-0000-000000000004",
+    legacyId: "aethriz-social-media-management-marketing",
     company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
     role: "Social Media Management and Marketing",
     description:
@@ -68,7 +74,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Digital Marketing, SEO & Growth Hacking",
   },
   {
-    id: "aethriz-influencer-partnerships-management",
+    id: "d0000002-0000-0000-0000-000000000005",
+    legacyId: "aethriz-influencer-partnerships-management",
     company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
     role: "Influencer Partnerships and Management",
     description:
@@ -79,7 +86,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Public Relations, Media & Event Management",
   },
   {
-    id: "aethriz-graphics-design",
+    id: "d0000002-0000-0000-0000-000000000006",
+    legacyId: "aethriz-graphics-design",
     company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
     role: "Graphics Design",
     description:
@@ -90,7 +98,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "UI/UX Design & Product Experience",
   },
   {
-    id: "vetria-ai-campus-ambassador",
+    id: "d0000003-0000-0000-0000-000000000001",
+    legacyId: "vetria-ai-campus-ambassador",
     company: "VetriaAI Innovation Pvt. Ltd. (VetriaAI & LaunchPadX)",
     role: "Campus Ambassador",
     description:
@@ -99,10 +108,10 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
     domain: "Public Relations, Media & Event Management",
   },
   {
-    id: "student-forge-requirement",
+    id: "d0000004-0000-0000-0000-000000000001",
+    legacyId: "student-forge-requirement",
     company: "Student Forge",
     requirement: "10+ people from tech and marketing; 2 from web dev",
     domain: "General",
   },
 ];
-
