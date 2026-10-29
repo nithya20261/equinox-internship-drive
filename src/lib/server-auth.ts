@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getConfirmedStudent } from "@/data/confirmed-students";
 
 // 1. Separate anon/publishable-key client for standard user authentication (auth.signInWithPassword)
 let cachedAnonClient: SupabaseClient | null = null;
@@ -122,9 +123,10 @@ async function resetDurableRateLimit(key: string): Promise<void> {
 }
 
 export interface StudentAuthPayload {
-  fullName: string;
-  teamCode: string;
+  cnfNumber?: string | undefined;
   password: string;
+  fullName?: string | undefined;
+  teamCode?: string | undefined;
 }
 
 export interface AdminAuthPayload {
@@ -133,76 +135,125 @@ export interface AdminAuthPayload {
 }
 
 /**
- * Server function: Authenticates student using Full Name + Team Code + Password.
- * Resolves the student email securely on the server with rate limiting.
- * The student's email is NEVER returned to unauthenticated clients.
+ * Server function: Authenticates student strictly using Confirmation Number (CNF) + Password.
+ * Password must be the exact same CNF number. Only confirmed students in the master list are allowed.
  */
 export const loginStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentAuthPayload) => data)
   .handler(async ({ data }) => {
-    // Strictly require SUPABASE_SERVICE_ROLE_KEY on the server
-    const serverClient = getServerSupabase();
+    const rawCnf = (data.cnfNumber || data.teamCode || "").trim().toUpperCase();
+    const confirmedStudent = getConfirmedStudent(rawCnf);
 
-    const cleanName = data.fullName.trim();
-    const cleanCode = data.teamCode.trim().toUpperCase();
-    const rateLimitKey = `student:${cleanCode}`;
+    if (!confirmedStudent) {
+      throw new Error(
+        "Unauthorized Confirmation Number. Only registered Equinox CNF numbers are allowed to log in."
+      );
+    }
 
+    const rawPassword = data.password.trim().toUpperCase();
+    if (rawPassword !== confirmedStudent.cnf) {
+      throw new Error(
+        `Invalid password. For registered students, your password is your CNF number (${confirmedStudent.cnf}).`
+      );
+    }
+
+    const rateLimitKey = `student:${confirmedStudent.cnf}`;
     await verifyDurableRateLimit(rateLimitKey);
 
-    let studentEmail: string | null = null;
+    const studentEmail = `${confirmedStudent.cnf.toLowerCase()}@equinox.mlrit.ac.in`;
+    const serverClient = getServerSupabase();
+    const anonClient = getServerAnonClient();
 
-    // Direct email entry
-    if (cleanCode.includes("@")) {
-      studentEmail = cleanCode.toLowerCase();
+    let authUserSession: { session: any; user: any } | null = null;
+
+    // 1. Try signing in directly with Supabase Auth
+    const { data: directSignIn, error: directSignInError } = await anonClient.auth.signInWithPassword({
+      email: studentEmail,
+      password: confirmedStudent.cnf,
+    });
+
+    if (directSignIn?.session && directSignIn?.user) {
+      authUserSession = directSignIn;
     } else {
-      // Server-side lookup: Requires BOTH verified full name and team code
-      const { data: lookedUpEmail, error: rpcError } = await serverClient.rpc(
-        "lookup_student_email_by_team_code",
-        {
-          lookup_code: cleanCode,
-          lookup_name: cleanName,
-        }
-      );
+      // 2. User might not exist yet or password needs syncing
+      const { data: createdUser, error: createError } = await serverClient.auth.admin.createUser({
+        email: studentEmail,
+        password: confirmedStudent.cnf,
+        email_confirm: true,
+        user_metadata: {
+          role: "student",
+          full_name: confirmedStudent.name,
+          team_code: confirmedStudent.cnf,
+          cnf_number: confirmedStudent.cnf,
+        },
+      });
 
-      if (rpcError || !lookedUpEmail) {
+      let userId = createdUser?.user?.id;
+
+      if (!userId && createError?.message.toLowerCase().includes("already")) {
+        const { data: existingProfile } = await serverClient
+          .from("profiles")
+          .select("id")
+          .eq("email", studentEmail)
+          .maybeSingle();
+
+        const profileId = existingProfile?.id;
+        if (profileId) {
+          userId = profileId;
+          await serverClient.auth.admin.updateUserById(profileId, {
+            password: confirmedStudent.cnf,
+            user_metadata: {
+              role: "student",
+              full_name: confirmedStudent.name,
+              team_code: confirmedStudent.cnf,
+              cnf_number: confirmedStudent.cnf,
+            },
+          });
+        }
+      }
+
+      // 3. Final sign-in to retrieve authoritative session
+      const { data: finalSignIn, error: finalSignInError } = await anonClient.auth.signInWithPassword({
+        email: studentEmail,
+        password: confirmedStudent.cnf,
+      });
+
+      if (finalSignInError || !finalSignIn?.session) {
         throw new Error(
-          "Could not verify your student account. Please verify your Full Name and Team Code, or log in with your registered email."
+          finalSignInError?.message || "Could not initialize session for authorized student."
         );
       }
 
-      studentEmail = (lookedUpEmail as string).toLowerCase();
+      authUserSession = finalSignIn;
     }
 
-    // Authenticate with Supabase Auth using the separate anon/publishable-key client
-    const { data: authData, error: authError } = await getServerAnonClient().auth.signInWithPassword({
+    // Ensure profiles and students records exist and match the verified student details
+    await serverClient.from("profiles").upsert({
+      id: authUserSession.user.id,
+      role: "student",
       email: studentEmail,
-      password: data.password,
     });
 
-    if (authError || !authData.session) {
-      if (authError?.message.toLowerCase().includes("email not confirmed")) {
-        throw new Error("Email not verified yet. Please check your inbox for the confirmation link.");
-      }
-      throw new Error("Invalid student credentials. Please check your password.");
-    }
+    await serverClient.from("students").upsert({
+      user_id: authUserSession.user.id,
+      full_name: confirmedStudent.name,
+      team_code: confirmedStudent.cnf,
+      college: "MLR Institute of Technology",
+    });
 
-    // Strict profile check via server-only service_role client: reject if missing, error, or role not exactly 'student'
-    const { data: profile, error: profileError } = await serverClient
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
-
-    if (profileError || !profile || profile.role !== "student") {
-      throw new Error("This account is not authorized as a registered student.");
-    }
-
-    // Login succeeded: clear rate limit
     await resetDurableRateLimit(rateLimitKey);
 
     return {
-      session: authData.session,
-      user: authData.user,
+      session: authUserSession.session,
+      user: {
+        ...authUserSession.user,
+        user_metadata: {
+          ...authUserSession.user.user_metadata,
+          full_name: confirmedStudent.name,
+          team_code: confirmedStudent.cnf,
+          cnf_number: confirmedStudent.cnf,
+        },
+      },
     };
   });
 

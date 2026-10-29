@@ -15,9 +15,8 @@ function Login() {
   const router = useRouter();
   const [role, setRole] = useState<"student" | "admin">("student");
   
-  // Student login fields: Name, Team code, Password
-  const [studentName, setStudentName] = useState("");
-  const [teamCode, setTeamCode] = useState("");
+  // Student login fields: Confirmation Number (CNF) & Password (same as CNF)
+  const [cnfNumber, setCnfNumber] = useState("");
   const [studentPassword, setStudentPassword] = useState("");
 
   // Admin login fields: Username (EQUINOXCIE), Password
@@ -35,8 +34,7 @@ function Login() {
       setIsSubmitting(true);
       if (role === "student") {
         await loginStudent({
-          teamCode: teamCode.trim(),
-          name: studentName.trim(),
+          cnfNumber: cnfNumber.trim(),
           password: studentPassword,
         });
         await router.invalidate();
@@ -86,40 +84,24 @@ function Login() {
         {role === "student" ? (
           <>
             <div>
-              <FieldLabel htmlFor="l-student-name">Full name</FieldLabel>
+              <FieldLabel htmlFor="l-cnf-number" hint="e.g. CNF-F6D524">Confirmation Number</FieldLabel>
               <input
-                id="l-student-name"
+                id="l-cnf-number"
                 type="text"
-                autoComplete="name"
-                value={studentName}
+                autoComplete="username"
+                value={cnfNumber}
                 onChange={(e) => {
-                  setStudentName(e.target.value);
+                  setCnfNumber(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                className="field"
-                placeholder="e.g. Aditi Rao"
+                className="field uppercase tracking-wider font-mono font-medium"
+                placeholder="CNF-XXXXXX"
                 required
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="l-team-code" hint="Or registered email">Team code</FieldLabel>
-              <input
-                id="l-team-code"
-                type="text"
-                value={teamCode}
-                onChange={(e) => {
-                  setTeamCode(e.target.value);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                className="field uppercase"
-                placeholder="e.g. EQX-402"
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel htmlFor="l-student-pass">Password</FieldLabel>
+              <FieldLabel htmlFor="l-student-pass" hint="Same as your CNF number">Password</FieldLabel>
               <input
                 id="l-student-pass"
                 type="password"
@@ -129,8 +111,8 @@ function Login() {
                   setStudentPassword(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                className="field"
-                placeholder="••••••••"
+                className="field font-mono"
+                placeholder="CNF-XXXXXX"
                 required
               />
             </div>

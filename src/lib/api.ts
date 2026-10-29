@@ -169,19 +169,21 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
  * The student's email is NEVER exposed or returned to unauthenticated clients.
  */
 export async function loginStudent(credentials: {
+  cnfNumber?: string;
   email?: string;
   teamCode?: string;
   name?: string;
   password: string;
 }) {
-  const teamCodeOrEmail = (credentials.teamCode || credentials.email || "").trim();
+  const cnfNumber = (credentials.cnfNumber || credentials.teamCode || credentials.email || "").trim().toUpperCase();
   const fullName = (credentials.name || "").trim();
 
   // Execute server-side authenticated flow with rate-limiting & zero email leakage
   const result = await loginStudentServerFn({
     data: {
+      cnfNumber,
       fullName,
-      teamCode: teamCodeOrEmail,
+      teamCode: cnfNumber,
       password: credentials.password,
     },
   });
@@ -207,8 +209,8 @@ export async function loginStudent(credentials: {
   loginUser({
     id: result.user.id,
     role: "student",
-    name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName,
-    teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || teamCodeOrEmail,
+    name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName || cnfNumber,
+    teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || cnfNumber,
     email: result.user.email ?? undefined,
   });
 
