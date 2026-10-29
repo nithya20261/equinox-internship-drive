@@ -5,6 +5,7 @@ import {
   loginAdminServerFn,
   studentSubmitApplicationServerFn,
   registerStudentServerFn,
+  adminCreateOrUpdateRoleServerFn,
 } from "./server-auth";
 
 const RESUME_BUCKET = "resumes";
@@ -288,6 +289,36 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
     ...data,
     company: "Partner Organization (Confidential)",
   };
+}
+
+/**
+ * Admin action to manually add or update role details in Supabase.
+ */
+export async function adminCreateOrUpdateRole(roleData: {
+  id?: string | undefined;
+  role: string;
+  domain: string;
+  location?: string | undefined;
+  mode?: string | undefined;
+  description?: string | undefined;
+  responsibilities?: string[] | undefined;
+  skills?: string[] | undefined;
+  eligibility?: string | undefined;
+}) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  return await adminCreateOrUpdateRoleServerFn({
+    data: {
+      adminToken: session.access_token,
+      ...roleData,
+    },
+  });
 }
 
 /**

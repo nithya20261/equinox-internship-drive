@@ -560,3 +560,86 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
     };
   });
 
+export interface AdminRolePayload {
+  adminToken: string;
+  id?: string | undefined;
+  role: string;
+  domain: string;
+  location?: string | undefined;
+  mode?: string | undefined;
+  description?: string | undefined;
+  responsibilities?: string[] | undefined;
+  skills?: string[] | undefined;
+  eligibility?: string | undefined;
+}
+
+/**
+ * Server function: Allows administrators to create or edit internship roles manually.
+ */
+export const adminCreateOrUpdateRoleServerFn = createServerFn({ method: "POST" })
+  .validator((data: AdminRolePayload) => data)
+  .handler(async ({ data }) => {
+    const { adminToken } = data;
+    if (!adminToken) {
+      throw new Error("Admin authentication required.");
+    }
+
+    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+    if (authError || !authData?.user?.id) {
+      throw new Error("Invalid admin session.");
+    }
+
+    const serverClient = getServerSupabase();
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "admin") {
+      throw new Error("Unauthorized: Only administrators can add or edit roles.");
+    }
+
+    const { data: company } = await serverClient.from("companies").select("id").limit(1).maybeSingle();
+    const companyId = company?.id || "8adf0d6d-de90-4838-82d6-e111b29b12c5";
+
+    const rolePayload: Record<string, unknown> = {
+      role: data.role.trim(),
+      domain: data.domain.trim(),
+      location: data.location?.trim() || "MLRIT Campus",
+      mode: data.mode?.trim() || "On-Campus",
+      description: data.description?.trim() || "",
+      responsibilities: data.responsibilities || [],
+      skills: data.skills || [],
+      eligibility: data.eligibility?.trim() || "Open to all registered Equinox attendees",
+      status: "open",
+      company_id: companyId,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.id && data.id !== "preview") {
+      const { data: updated, error: updateError } = await serverClient
+        .from("internships")
+        .update(rolePayload)
+        .eq("id", data.id)
+        .select()
+        .single();
+
+      if (updateError) throw new Error(updateError.message);
+      return updated;
+    } else {
+      const { data: created, error: createError } = await serverClient
+        .from("internships")
+        .insert({
+          ...rolePayload,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) throw new Error(createError.message);
+      return created;
+    }
+  });
+
+

@@ -5,7 +5,6 @@ import { useAuth } from "@/lib/auth";
 import {
   submitStudentApplication,
   getOpportunities,
-  getStudentProfile,
   type Opportunity,
 } from "@/lib/api";
 
@@ -24,17 +23,17 @@ export function StudentApplicationForm({
   const [availableRoles, setAvailableRoles] = useState<Opportunity[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
 
-  // Form Fields (Exact 10 fields)
-  const [fullName, setFullName] = useState(user?.name || "");
+  // Form Fields (Exact 10 fields, clean without auto-filled values)
+  const [fullName, setFullName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
-  const [email, setEmail] = useState(user?.email || "");
+  const [email, setEmail] = useState("");
   const [instituteAndBranch, setInstituteAndBranch] = useState("");
   const [preferredRole, setPreferredRole] = useState(initialRoleId || "");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [relevantSkills, setRelevantSkills] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
-  const [availability, setAvailability] = useState("Immediate (3-6 Months)");
+  const [availability, setAvailability] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -61,30 +60,6 @@ export function StudentApplicationForm({
       mounted = false;
     };
   }, [initialRoleId, preferredRole]);
-
-  // Pre-fill student profile data if available
-  useEffect(() => {
-    if (isLoggedIn) {
-      getStudentProfile().then((prof) => {
-        if (!prof) return;
-        if (prof.student?.full_name && !fullName) {
-          setFullName(prof.student.full_name);
-        }
-        if (prof.student?.mobile && !contactNumber) {
-          setContactNumber(prof.student.mobile);
-        }
-        if (prof.student?.college && !instituteAndBranch) {
-          setInstituteAndBranch(prof.student.college);
-        }
-        if (prof.user?.email && !email) {
-          setEmail(prof.user.email);
-        }
-        if (prof.student?.skills && Array.isArray(prof.student.skills) && prof.student.skills.length > 0 && !relevantSkills) {
-          setRelevantSkills(prof.student.skills.join(", "));
-        }
-      });
-    }
-  }, [isLoggedIn]);
 
   if (!isLoggedIn) {
     return (
