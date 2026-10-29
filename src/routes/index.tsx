@@ -23,18 +23,13 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const [showIntro, setShowIntro] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("equinox_intro_seen") !== "true";
-  });
+  const [showIntro, setShowIntro] = useState<boolean>(true);
 
   const handleIntroComplete = () => {
     setShowIntro(false);
-    sessionStorage.setItem("equinox_intro_seen", "true");
   };
 
   const handleReplayIntro = () => {
-    sessionStorage.removeItem("equinox_intro_seen");
     window.scrollTo(0, 0);
     setShowIntro(true);
   };
@@ -42,7 +37,13 @@ function Index() {
   return (
     <div className="relative min-h-screen">
       {showIntro && <CinematicIntro onComplete={handleIntroComplete} />}
-      <div className="relative">
+      <div
+        className={`relative transition-opacity duration-700 ease-in-out ${
+          showIntro
+            ? "opacity-0 pointer-events-none select-none h-screen overflow-hidden"
+            : "opacity-100"
+        }`}
+      >
         <Hero onReplayIntro={handleReplayIntro} />
         <WhatIs />
         <IdentityShield />
