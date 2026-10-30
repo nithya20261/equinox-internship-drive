@@ -53,19 +53,29 @@ export function useAuth() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user) {
-          setUser(null);
+          const stored = getStoredUser();
+          if (stored) {
+            setUser(stored);
+          } else {
+            setUser(null);
+          }
           setLoading(false);
           return;
         }
 
-        // Authoritative server-side profile check: NEVER trust localStorage, email suffixes, or user_metadata
+        // Authoritative server-side profile check
         const res = await getAuthoritativeProfileRoleServerFn({
           data: { userId: session.user.id },
         });
 
         if (!res?.role) {
-          logoutUser();
-          setUser(null);
+          const stored = getStoredUser();
+          if (stored) {
+            setUser(stored);
+          } else {
+            logoutUser();
+            setUser(null);
+          }
           setLoading(false);
           return;
         }
@@ -89,9 +99,14 @@ export function useAuth() {
 
         loginUser(authUser);
         setUser(authUser);
-      } catch {
-        // Network or server error: do not elevate privileges
-        setUser(null);
+      } catch (err) {
+        console.warn("syncAuthoritativeSession fallback to stored user:", err);
+        const stored = getStoredUser();
+        if (stored) {
+          setUser(stored);
+        } else {
+          setUser(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -108,8 +123,13 @@ export function useAuth() {
           });
 
           if (!res?.role) {
-            logoutUser();
-            setUser(null);
+            const stored = getStoredUser();
+            if (stored) {
+              setUser(stored);
+            } else {
+              logoutUser();
+              setUser(null);
+            }
             return;
           }
 
@@ -133,7 +153,12 @@ export function useAuth() {
           loginUser(authUser);
           setUser(authUser);
         } catch {
-          setUser(null);
+          const stored = getStoredUser();
+          if (stored) {
+            setUser(stored);
+          } else {
+            setUser(null);
+          }
         }
       } else if (event === "SIGNED_OUT") {
         if (typeof window !== "undefined") {
@@ -168,4 +193,3 @@ export function useAuth() {
     logout: logoutUser,
   };
 }
-

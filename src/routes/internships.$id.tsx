@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Lock, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { Container, TbaBadge } from "@/components/site/primitives";
+import { Container } from "@/components/site/primitives";
 import { getOpportunityById, type Opportunity } from "@/lib/api";
 import { StudentApplicationForm } from "@/components/site/StudentApplicationForm";
 
@@ -38,37 +38,6 @@ function Detail() {
         });
     }
   }, [id]);
-
-  // If user is not logged in, prevent viewing details
-  if (!isLoggedIn) {
-    return (
-      <Container className="py-20">
-        <Link to="/internships" className="eyebrow inline-flex items-center gap-2 text-muted-foreground hover:text-foreground">
-          <ArrowLeft size={14} /> All opportunities
-        </Link>
-        <div className="mx-auto mt-10 max-w-xl border border-foreground bg-card p-10 text-center md:p-14">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center border border-foreground bg-paper-deep text-signal">
-            <Lock className="h-8 w-8" />
-          </div>
-          <p className="eyebrow mt-6 text-signal">Access Restricted</p>
-          <h1 className="headline mt-3 text-4xl md:text-5xl">Log In to View Details</h1>
-          <p className="mt-4 text-muted-foreground">
-            Internship role descriptions, company profiles, responsibilities, eligibility requirements and application forms are visible exclusively to registered students and attendees.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link to="/login" className="btn btn-signal">
-              Log in to access
-            </Link>
-            <Link to="/register" className="btn btn-line">
-              Create student account
-            </Link>
-          </div>
-        </div>
-      </Container>
-    );
-  }
-
-
 
   if (isLoading) {
     return (
