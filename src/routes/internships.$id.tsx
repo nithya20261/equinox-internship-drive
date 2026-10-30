@@ -100,7 +100,7 @@ function Detail() {
         .filter(Boolean);
 
   return (
-    <div className="w-full min-h-screen px-4 sm:px-8 lg:px-12 py-8 md:py-12">
+    <div className="w-full min-h-screen px-4 sm:px-8 lg:px-12 py-6 sm:py-8 md:py-12">
       <Link
         to="/internships"
         className="eyebrow inline-flex items-center gap-2 text-muted-foreground hover:text-foreground"
@@ -109,7 +109,7 @@ function Detail() {
       </Link>
 
       {/* TOP: Role Description & Specifications (Full Width) */}
-      <div className="mt-6 w-full border border-white/20 bg-[#151515] p-6 md:p-10 rounded-2xl shadow-2xl">
+      <div className="mt-6 w-full border border-white/20 bg-[#151515] p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-mono text-[#7484FE]">
             {opportunity?.company && opportunity.company !== "Partner Organization (Confidential)" ? (
@@ -128,7 +128,7 @@ function Detail() {
           </span>
         </div>
 
-        <h1 className="font-display mt-4 text-3xl md:text-5xl lg:text-6xl text-[#F7F2F6]">
+        <h1 className="font-display mt-4 text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-[#F7F2F6] break-words">
           {roleTitle}
         </h1>
 
@@ -218,14 +218,14 @@ function Detail() {
       </div>
 
       {/* BELOW: 10 Blocks of Details & Resume Uploading (Full Width) */}
-      <div className="mt-10 w-full border border-white/20 bg-[#151515] p-6 md:p-10 rounded-2xl shadow-2xl">
+      <div className="mt-8 sm:mt-10 w-full border border-white/20 bg-[#151515] p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl">
         <div className="border-b border-white/10 pb-5">
           <div className="flex items-center gap-2 text-xs font-mono text-[#7484FE]">
             <span>EQUINOX CAREER CONNECT</span>
             <span>·</span>
             <span className="text-[#33FF67]">10 DETAILS BLOCKS</span>
           </div>
-          <h2 className="font-display mt-2 text-2xl md:text-4xl text-[#F7F2F6]">
+          <h2 className="font-display mt-2 text-xl sm:text-3xl md:text-4xl text-[#F7F2F6] break-words">
             Upload Resume & Candidate Details
           </h2>
           <p className="mt-1 text-xs md:text-sm text-[#F7F2F6]/60">

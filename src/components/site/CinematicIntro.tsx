@@ -80,8 +80,8 @@ export function CinematicIntro({ onComplete }: CinematicIntroProps) {
             phase >= 3 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
         >
-          <h1 className="font-display-title text-4xl sm:text-6xl md:text-7xl font-black uppercase tracking-tight">
-            <span className="mr-2 sm:mr-3 inline-block bg-[#F7F2F6] px-3.5 py-1 text-[#2A2A2A] shadow-[4px_4px_0px_#2A2A2A]">
+          <h1 className="font-display-title text-2xl sm:text-5xl md:text-7xl font-black uppercase tracking-tight">
+            <span className="mr-1.5 sm:mr-3 inline-block bg-[#F7F2F6] px-2.5 sm:px-3.5 py-1 text-[#2A2A2A] shadow-[3px_3px_0px_#2A2A2A] sm:shadow-[4px_4px_0px_#2A2A2A]">
               INTERNSHIP
             </span>
             <span className="text-[#F7F2F6]">DRIVE</span>

@@ -227,7 +227,7 @@ function Internships() {
         )}
 
         {/* Confidentiality protocol notice */}
-        <div className="mb-6 flex items-center justify-between rounded-full border border-white/20 bg-[#151515] px-5 py-2.5 text-xs font-mono text-white/80">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-2xl sm:rounded-full border border-white/20 bg-[#151515] px-4 sm:px-5 py-3 sm:py-2.5 text-xs font-mono text-white/80">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-[#33FF67]" />
             <span className="text-[#33FF67] font-bold uppercase">RECRUITER SHIELD ACTIVE:</span>
@@ -239,7 +239,7 @@ function Internships() {
         </div>
 
         {/* Track Selection Tabs */}
-        <div className="mb-6 grid grid-cols-3 p-1 rounded-full border border-white/20 bg-[#151515]">
+        <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 p-1.5 sm:p-1 gap-1 sm:gap-0 rounded-2xl sm:rounded-full border border-white/20 bg-[#151515]">
           {[
             { id: "all", label: "All Tracks (20 Categories)" },
             { id: "technical", label: "Technical Track (10)" },
@@ -252,7 +252,7 @@ function Internships() {
                 setActiveTrack(t.id as InternshipTrack);
                 setSelectedCategory("all");
               }}
-              className={`font-sans text-sm font-semibold tracking-normal py-2.5 rounded-full text-center transition-all ${
+              className={`font-sans text-sm font-semibold tracking-normal py-2.5 min-h-[44px] flex items-center justify-center rounded-xl sm:rounded-full text-center transition-all ${
                 activeTrack === t.id
                   ? "bg-[#7484FE] text-[#151515] font-bold shadow-[0_0_12px_rgba(116,132,254,0.3)]"
                   : "text-[#F7F2F6]/60 hover:text-[#F7F2F6] hover:bg-[#2A2A2A]/40"
@@ -273,7 +273,7 @@ function Internships() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search roles, required skills or domains..."
-                className="w-full rounded-xl border border-white/20 bg-[#151515] px-4 py-3 font-sans text-sm text-[#F7F2F6] outline-none placeholder:text-[#F7F2F6]/40 focus:border-[#7484FE]"
+                className="w-full rounded-xl border border-white/20 bg-[#151515] px-4 py-3 font-sans text-base sm:text-sm min-h-[44px] text-[#F7F2F6] outline-none placeholder:text-[#F7F2F6]/40 focus:border-[#7484FE]"
               />
             </div>
             <div className="w-full md:w-80">
@@ -282,7 +282,7 @@ function Internships() {
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 aria-label="Filter by Category"
-                className="w-full rounded-xl border border-white/20 bg-[#151515] px-4 py-3 font-sans text-sm text-[#F7F2F6] outline-none focus:border-[#7484FE]"
+                className="w-full rounded-xl border border-white/20 bg-[#151515] px-4 py-3 font-sans text-base sm:text-sm min-h-[44px] text-[#F7F2F6] outline-none focus:border-[#7484FE]"
               >
                 <option value="all">
                   All Categories ({availableCategories.length})
@@ -379,7 +379,7 @@ function Internships() {
       {selectedIds.size > 0 && (
         <aside
           aria-label="Application summary"
-          className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-4 border border-[#33FF67] bg-black/95 px-6 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md"
+          className="fixed bottom-4 sm:bottom-6 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 rounded-2xl sm:rounded-full border border-[#33FF67] bg-black/95 p-4 sm:px-6 sm:py-4 shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-md"
         >
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#33FF67] text-black font-mono font-bold text-xs">
@@ -399,7 +399,7 @@ function Internships() {
             <button
               type="button"
               onClick={clearSelection}
-              className="btn btn-line h-9 px-3 text-xs"
+              className="btn btn-line h-11 min-h-[44px] px-4 text-xs font-semibold"
             >
               Clear
             </button>
@@ -410,7 +410,7 @@ function Internships() {
                 setBatchResult(null);
                 setBatchError(null);
               }}
-              className="btn btn-signal h-9 px-4 text-xs font-bold"
+              className="btn btn-signal h-11 min-h-[44px] px-5 text-xs font-bold"
             >
               Apply to Selected ({selectedIds.size})
             </button>
@@ -426,11 +426,11 @@ function Internships() {
           aria-labelledby="modal-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
         >
-          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border-2 border-white/20 bg-[#151515] p-6 text-[#F7F2F6] md:p-8 shadow-2xl">
+          <div className="relative max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl border-2 border-white/20 bg-[#151515] p-4 sm:p-6 text-[#F7F2F6] md:p-8 shadow-2xl">
             <button
               type="button"
               onClick={() => setIsApplyModalOpen(false)}
-              className="absolute right-4 top-4 text-[#F7F2F6]/60 hover:text-[#F7F2F6]"
+              className="absolute right-3 top-3 text-[#F7F2F6]/60 hover:text-[#F7F2F6] min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg"
             >
               <X size={20} />
             </button>

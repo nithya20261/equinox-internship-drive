@@ -97,11 +97,11 @@ function Hero() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold">
+            <Link to="/internships" className="btn btn-signal h-11 px-6 text-sm font-semibold w-full sm:w-auto">
               Explore Opportunities <ArrowRight className="h-4 w-4" />
             </Link>
             {!isLoggedIn && (
-              <Link to="/login" className="btn btn-line h-11 px-6 text-sm font-semibold">
+              <Link to="/login" className="btn btn-line h-11 px-6 text-sm font-semibold w-full sm:w-auto">
                 Log in
               </Link>
             )}
@@ -116,8 +116,8 @@ function IdentityShield() {
   return (
     <section className="border-b border-white/20 bg-[#2A2A2A] py-8 riso-texture">
       <Container>
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-2 border-white/20 bg-[#151515]/90 p-6 md:p-8 rounded-2xl shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-2 border-white/20 bg-[#151515]/90 p-4 sm:p-6 md:p-8 rounded-2xl shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#33FF67] bg-[#33FF67]/15 text-[#33FF67]">
               <Shield className="h-6 w-6" />
             </div>
@@ -202,11 +202,11 @@ function FinalCta() {
         <p className="mt-6 font-sans text-base sm:text-lg text-[#F7F2F6]/75 max-w-2xl mx-auto leading-relaxed">
           Open to all eligible students. Submit your credentials once, apply to multiple participating companies, and track interview shortlists.
         </p>
-        <div className="mt-10 flex flex-wrap justify-center gap-4">
-          <Link to="/internships" className="btn btn-signal h-12 px-8 text-base font-semibold">
+        <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
+          <Link to="/internships" className="btn btn-signal h-12 min-h-[44px] px-8 text-base font-semibold w-full sm:w-auto">
             Explore Opportunities <ArrowRight className="h-4 w-4" />
           </Link>
-          <Link to="/login" className="btn btn-line h-12 px-8 text-base font-semibold">
+          <Link to="/login" className="btn btn-line h-12 min-h-[44px] px-8 text-base font-semibold w-full sm:w-auto">
             Candidate Login
           </Link>
         </div>

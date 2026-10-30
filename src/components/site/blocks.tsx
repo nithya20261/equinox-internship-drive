@@ -116,14 +116,14 @@ export function OpportunitySlot({
             <Link
               to="/internships/$id"
               params={{ id: detailId }}
-              className="btn btn-signal h-9 px-4 text-sm font-semibold"
+              className="btn btn-signal h-11 min-h-[44px] px-4 text-sm font-semibold"
             >
               View Role <ArrowRight size={14} className="ml-1" />
             </Link>
           ) : (
             <Link
               to="/login"
-              className="btn btn-line h-9 px-4 text-sm font-semibold"
+              className="btn btn-line h-11 min-h-[44px] px-4 text-sm font-semibold"
             >
               Login <Lock size={14} className="ml-1" />
             </Link>
@@ -270,7 +270,7 @@ export function OpportunityCard({
         <Link
           to="/internships/$id"
           params={{ id: detailId }}
-          className="btn btn-signal w-full h-9 text-xs font-bold justify-center flex items-center gap-1.5 rounded-xl shadow-md"
+          className="btn btn-signal w-full h-11 min-h-[44px] text-xs font-bold justify-center flex items-center gap-1.5 rounded-xl shadow-md"
         >
           View Role <ArrowRight size={13} />
         </Link>

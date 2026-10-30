@@ -336,7 +336,7 @@ export function StudentApplicationForm({
               value={fullName}
               onChange={handleTextChange("fullName", setFullName)}
               placeholder="e.g. Shreyas"
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.fullName ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -367,7 +367,7 @@ export function StudentApplicationForm({
               value={contactNumber}
               onChange={handleTextChange("contactNumber", setContactNumber)}
               placeholder="Enter 10-digit mobile (e.g. 9876543210)"
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.contactNumber ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -398,7 +398,7 @@ export function StudentApplicationForm({
               value={email}
               onChange={handleTextChange("email", setEmail)}
               placeholder="Enter email address"
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.email ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -429,7 +429,7 @@ export function StudentApplicationForm({
               value={instituteAndBranch}
               onChange={handleTextChange("instituteAndBranch", setInstituteAndBranch)}
               placeholder="e.g. MLRIT - B.Tech CSE"
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.instituteAndBranch ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -459,7 +459,7 @@ export function StudentApplicationForm({
               value={preferredRole}
               onChange={handleTextChange("preferredRole", setPreferredRole)}
               disabled={loadingRoles}
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none cursor-pointer ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none cursor-pointer ${
                 fieldErrors.preferredRole ? "border-red-500/60" : "border-white/20"
               }`}
             >
@@ -513,7 +513,7 @@ export function StudentApplicationForm({
                   });
                 }
               }}
-              className="block w-full text-xs text-[#F7F2F6] file:mr-3 file:border-0 file:bg-[#7484FE] file:px-4 file:py-2 file:font-mono file:text-xs file:font-bold file:text-black file:rounded-md cursor-pointer hover:file:bg-[#5868df] transition-all"
+              className="block w-full text-xs text-[#F7F2F6] file:mr-3 file:border-0 file:bg-[#7484FE] file:px-4 file:py-2.5 file:min-h-[44px] file:font-mono file:text-xs file:font-bold file:text-black file:rounded-md cursor-pointer hover:file:bg-[#5868df] transition-all"
             />
             {resumeFile && (
               <p className="mt-2 text-[11px] font-mono text-[#33FF67]">
@@ -547,7 +547,7 @@ export function StudentApplicationForm({
               value={videoUrl}
               onChange={handleTextChange("videoUrl", setVideoUrl)}
               placeholder="https://drive.google.com/file/d/..."
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.videoUrl ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -578,7 +578,7 @@ export function StudentApplicationForm({
               value={relevantSkills}
               onChange={handleTextChange("relevantSkills", setRelevantSkills)}
               placeholder="e.g. React, Node.js, Python, UI/UX, Cloud"
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.relevantSkills ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -608,7 +608,7 @@ export function StudentApplicationForm({
               value={portfolioUrl}
               onChange={handleTextChange("portfolioUrl", setPortfolioUrl)}
               placeholder="https://github.com/... or https://linkedin.com/in/..."
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.portfolioUrl ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -639,7 +639,7 @@ export function StudentApplicationForm({
               value={availability}
               onChange={handleTextChange("availability", setAvailability)}
               placeholder="e.g. Immediate (Full-Time) / 3-6 Months"
-              className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
+              className={`w-full rounded-lg border bg-black/60 min-h-[44px] px-4 py-2.5 font-sans text-base sm:text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.availability ? "border-red-500/60" : "border-white/20"
               }`}
             />
@@ -709,13 +709,13 @@ export function StudentApplicationForm({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
           {onCancel && (
             <button
               type="button"
               disabled={isSubmitting}
               onClick={onCancel}
-              className="btn btn-line h-11 px-5 text-xs"
+              className="btn btn-line h-11 min-h-[44px] px-5 text-sm w-full sm:w-auto"
             >
               Cancel
             </button>
@@ -723,7 +723,7 @@ export function StudentApplicationForm({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="btn btn-signal h-11 px-8 text-xs font-bold shadow-lg disabled:opacity-50"
+            className="btn btn-signal h-11 min-h-[44px] px-8 text-sm font-bold shadow-lg disabled:opacity-50 w-full sm:w-auto"
           >
             {isSubmitting ? (
               <span className="flex items-center gap-2">
