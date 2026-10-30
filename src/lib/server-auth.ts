@@ -659,6 +659,18 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
     }
 
     const userId = authData.user.id;
+
+    // Validate resumePath format if provided
+    if (resumePath) {
+      const cleanPath = resumePath.trim();
+      if (!cleanPath.startsWith(`${userId}/`)) {
+        throw new Error("Invalid resume path: File must be in candidate's authorized folder.");
+      }
+      if (!/\.(pdf|doc|docx)$/i.test(cleanPath)) {
+        throw new Error("Invalid resume format: Only PDF, DOC, or DOCX files are accepted.");
+      }
+    }
+
     const serverClient = getServerSupabase();
     const meta = authData.user.user_metadata || {};
 

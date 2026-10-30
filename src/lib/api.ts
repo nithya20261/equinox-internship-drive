@@ -99,7 +99,11 @@ export interface BatchApplicationResult {
 /**
  * Validate and upload a resume file to the authenticated user's private folder in storage.
  */
-export async function uploadResumeFile(userId: string, file: File): Promise<string> {
+export async function uploadResumeFile(
+  userId: string,
+  file: File,
+  internshipId?: string
+): Promise<string> {
   const allowedTypes = [
     "application/pdf",
     "application/msword",
@@ -114,7 +118,8 @@ export async function uploadResumeFile(userId: string, file: File): Promise<stri
   }
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const resumePath = `${userId}/${Date.now()}-${safeName}`;
+  const prefix = internshipId ? `${internshipId.slice(0, 8)}-` : "";
+  const resumePath = `${userId}/${prefix}${Date.now()}-${safeName}`;
 
   // 30-second timeout guard to prevent infinite browser hanging on slow/unstable networks
   const uploadPromise = supabase.storage
@@ -791,31 +796,41 @@ export async function submitStudentApplication(
 
   // 1. Upload resume to private 'resumes' storage bucket
   onStageChange?.("uploading");
-  const resumePath = await uploadResumeFile(session.user.id, form.resumeFile);
+  const resumePath = await uploadResumeFile(session.user.id, form.resumeFile, form.preferredRole);
 
   // 2. Submit application record with video link and student data
   onStageChange?.("saving");
-  const result = await studentSubmitApplicationServerFn({
-    data: {
-      studentToken: session.access_token,
-      internshipIds: [form.preferredRole],
-      resumePath,
-      fullName: form.fullName.trim(),
-      contactNumber: form.contactNumber.trim(),
-      email: form.email.trim(),
-      instituteAndBranch: form.instituteAndBranch.trim(),
-      videoUrl: cleanVideoUrl,
-      skills: form.relevantSkills.trim(),
-      portfolioUrl: form.portfolioUrl?.trim() || undefined,
-      availability: form.availability.trim(),
-    },
-  });
+  try {
+    const result = await studentSubmitApplicationServerFn({
+      data: {
+        studentToken: session.access_token,
+        internshipIds: [form.preferredRole],
+        resumePath,
+        fullName: form.fullName.trim(),
+        contactNumber: form.contactNumber.trim(),
+        email: form.email.trim(),
+        instituteAndBranch: form.instituteAndBranch.trim(),
+        videoUrl: cleanVideoUrl,
+        skills: form.relevantSkills.trim(),
+        portfolioUrl: form.portfolioUrl?.trim() || undefined,
+        availability: form.availability.trim(),
+      },
+    });
 
-  if (result.duplicateCount > 0 && result.appliedCount === 0) {
-    return { alreadyApplied: true, success: false };
+    if (result.duplicateCount > 0 && result.appliedCount === 0) {
+      return { alreadyApplied: true, success: false };
+    }
+
+    return { alreadyApplied: false, success: true };
+  } catch (err) {
+    // Prevent orphaned resume file if the database insert/server function failed
+    try {
+      await supabase.storage.from(RESUME_BUCKET).remove([resumePath]);
+    } catch {
+      // Non-critical cleanup
+    }
+    throw err;
   }
-
-  return { alreadyApplied: false, success: true };
 }
 
 /**
@@ -862,19 +877,31 @@ export async function submitBatchApplications(
   // 1. Upload resume to private 'resumes' storage bucket if provided
   let resumePath: string | null = null;
   if (input.customResume) {
-    resumePath = await uploadResumeFile(session.user.id, input.customResume);
+    const primaryId = input.internshipIds[0];
+    resumePath = await uploadResumeFile(session.user.id, input.customResume, primaryId);
   }
 
   // 2. Delegate application submission and duplicate prevention to secure server function
-  const result = await studentSubmitApplicationServerFn({
-    data: {
-      studentToken: session.access_token,
-      internshipIds: input.internshipIds,
-      resumePath,
-    },
-  });
+  try {
+    const result = await studentSubmitApplicationServerFn({
+      data: {
+        studentToken: session.access_token,
+        internshipIds: input.internshipIds,
+        resumePath,
+      },
+    });
 
-  return result;
+    return result;
+  } catch (err) {
+    if (resumePath) {
+      try {
+        await supabase.storage.from(RESUME_BUCKET).remove([resumePath]);
+      } catch {
+        // Non-critical cleanup
+      }
+    }
+    throw err;
+  }
 }
 
 /**
