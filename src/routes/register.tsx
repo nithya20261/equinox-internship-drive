@@ -256,13 +256,7 @@ function Register() {
           />
         </div>
 
-        <div className="border border-[#2A2A2A] bg-[#0A0A0A] p-4 text-xs font-mono text-muted-foreground">
-          <p className="font-bold text-[#7484FE]">Direct Account Activation</p>
-          <p className="mt-1">
-            No email verification link required. You will be logged in immediately after submitting your details.
-            Resume will be uploaded when applying to your selected roles.
-          </p>
-        </div>
+
 
         <button
           type="submit"
