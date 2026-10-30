@@ -19,7 +19,6 @@ interface StudentFormState {
   fullName: string;
   cnfNumber: string;
   college: string;
-  teamCode: string;
   mobile: string;
   email: string;
   password: string;
@@ -34,7 +33,6 @@ function Register() {
     fullName: "",
     cnfNumber: "",
     college: "",
-    teamCode: "",
     mobile: "",
     email: "",
     password: "",
@@ -54,7 +52,6 @@ function Register() {
       !studentForm.fullName.trim() ||
       !studentForm.cnfNumber.trim() ||
       !studentForm.college.trim() ||
-      !studentForm.teamCode.trim() ||
       !studentForm.mobile.trim() ||
       !studentForm.email.trim() ||
       !studentForm.password.trim()
@@ -77,7 +74,6 @@ function Register() {
         full_name: studentForm.fullName,
         cnf_number: studentForm.cnfNumber.trim().toUpperCase(),
         college: studentForm.college,
-        team_code: studentForm.teamCode,
         mobile: studentForm.mobile,
         email: studentForm.email,
         password: studentForm.password,
@@ -134,10 +130,6 @@ function Register() {
               <div className="flex justify-between py-1.5">
                 <span className="text-muted-foreground">College</span>
                 <span className="font-mono font-medium">{studentForm.college}</span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-muted-foreground">Team Code</span>
-                <span className="font-mono font-medium">{studentForm.teamCode}</span>
               </div>
               <div className="flex justify-between py-1.5">
                 <span className="text-muted-foreground">Mobile</span>
@@ -229,31 +221,17 @@ function Register() {
           </p>
         </div>
 
-        <div>
-          <FieldLabel htmlFor="r-college">College / University</FieldLabel>
-          <input
-            id="r-college"
-            name="college"
-            type="text"
-            value={studentForm.college}
-            onChange={handleStudentChange}
-            placeholder="e.g. MLR Institute of Technology"
-            className="field"
-            required
-          />
-        </div>
-
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <FieldLabel htmlFor="r-team-code">Team code</FieldLabel>
+            <FieldLabel htmlFor="r-college">College / University</FieldLabel>
             <input
-              id="r-team-code"
-              name="teamCode"
+              id="r-college"
+              name="college"
               type="text"
-              value={studentForm.teamCode}
+              value={studentForm.college}
               onChange={handleStudentChange}
-              placeholder="e.g. KXBUKV"
-              className="field uppercase"
+              placeholder="e.g. MLR Institute of Technology"
+              className="field"
               required
             />
           </div>

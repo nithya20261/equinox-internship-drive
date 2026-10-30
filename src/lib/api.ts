@@ -27,9 +27,9 @@ export interface StudentRegistrationInput {
   email: string;
   password: string;
   college: string;
-  team_code: string;
-  cnf_number?: string | undefined;
+  cnf_number: string;
   mobile: string;
+  team_code?: string | undefined;
   skills?: string[] | undefined;
   graduation_year?: number | undefined;
   resume?: File | null | undefined;
@@ -166,8 +166,11 @@ export async function uploadResumeFile(
  */
 export async function registerStudentWithResume(input: StudentRegistrationInput) {
   const cleanEmail = input.email.trim().toLowerCase();
-  const cleanTeamCode = input.team_code.trim().toUpperCase();
+  const cleanCnf = (input.cnf_number || "").trim().toUpperCase();
   const cleanName = input.full_name.trim();
+  const cleanCollege = input.college.trim();
+  const cleanMobile = input.mobile.trim();
+  const cleanTeamCode = (input.team_code || cleanCnf).trim().toUpperCase();
 
   let serverResult: any = null;
   let serverError: string | null = null;
@@ -178,9 +181,10 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
         email: cleanEmail,
         password: input.password,
         fullName: cleanName,
-        college: input.college.trim(),
+        cnfNumber: cleanCnf,
+        college: cleanCollege,
+        mobile: cleanMobile,
         teamCode: cleanTeamCode,
-        mobile: input.mobile.trim(),
         skills: input.skills ?? [],
         graduationYear: input.graduation_year ?? null,
       },
@@ -188,8 +192,19 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
 
     if (serverResult?.error) {
       serverError = serverResult.error;
+      throw new Error(serverResult.error);
     }
   } catch (err: any) {
+    if (
+      err?.message &&
+      (err.message.includes("Denied") ||
+       err.message.includes("required") ||
+       err.message.includes("Restricted") ||
+       err.message.includes("Password") ||
+       err.message.includes("eligible"))
+    ) {
+      throw err;
+    }
     console.warn("registerStudentServerFn error, attempting direct client fallback:", err);
   }
 
@@ -206,7 +221,7 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
       id: serverResult.user.id,
       role: "student",
       name: cleanName,
-      teamCode: cleanTeamCode,
+      teamCode: serverResult.user.user_metadata?.team_code || cleanCnf,
       email: cleanEmail,
     });
 

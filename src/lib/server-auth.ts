@@ -327,6 +327,16 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
       );
     }
 
+    // Verify Premium Pass eligibility for CNF login
+    const cnfEligibility = verifyPassEligibility({
+      cnfNumber: confirmedStudent.cnf,
+      email: rawInput.includes("@") ? rawInput : undefined,
+    });
+
+    if (!cnfEligibility.allowed) {
+      throw new Error(cnfEligibility.reason);
+    }
+
     const rawPassword = cleanPassword.toUpperCase();
     if (rawPassword !== confirmedStudent.cnf) {
       throw new Error(
@@ -841,11 +851,12 @@ export interface RegisterStudentPayload {
   email: string;
   password: string;
   fullName: string;
+  cnfNumber: string;
   college: string;
-  teamCode: string;
   mobile: string;
-  skills?: string[];
-  graduationYear?: number | null;
+  teamCode?: string | undefined;
+  skills?: string[] | undefined;
+  graduationYear?: number | null | undefined;
 }
 
 /**
@@ -858,19 +869,38 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
     try {
       const supabaseAdmin = getServerSupabase();
       const cleanEmail = (data.email || "").trim().toLowerCase();
-      const cleanTeamCode = (data.teamCode || "").trim().toUpperCase();
+      const cleanCnf = (data.cnfNumber || "").trim().toUpperCase();
       const cleanName = (data.fullName || "").trim();
       const cleanCollege = (data.college || "").trim();
       const cleanMobile = (data.mobile || "").trim();
 
-      if (!cleanEmail || !data.password || !cleanName || !cleanTeamCode) {
+      if (!cleanEmail || !data.password || !cleanName || !cleanCnf) {
         return {
           success: false,
-          error: "Full name, email, password, and team code are required.",
+          error: "Full name, Confirmation Number (CNF), email, and password are required.",
           user: null,
           session: null,
         };
       }
+
+      // MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
+      // Rule: Existing Website CNF + Official Excel CNF Match + Premium Pass = ALLOWED
+      const eligibility = verifyPassEligibility({
+        cnfNumber: cleanCnf,
+        email: cleanEmail,
+      });
+
+      if (!eligibility.allowed) {
+        return {
+          success: false,
+          error: eligibility.reason,
+          user: null,
+          session: null,
+        };
+      }
+
+      // Use verified CNF and associated official team code from Excel roster if available
+      const officialTeamCode = eligibility.participant?.teamCode || cleanCnf;
 
       let userId: string | null = null;
       let authUser: any = null;
@@ -884,7 +914,9 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
           role: "student",
           full_name: cleanName,
           college: cleanCollege,
-          team_code: cleanTeamCode,
+          team_code: officialTeamCode,
+          cnf_number: cleanCnf,
+          pass_category: "Premium Pass",
           mobile: cleanMobile,
           skills: data.skills || [],
           graduation_year: data.graduationYear || null,
@@ -922,7 +954,9 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
               role: "student",
               full_name: cleanName,
               college: cleanCollege,
-              team_code: cleanTeamCode,
+              team_code: officialTeamCode,
+              cnf_number: cleanCnf,
+              pass_category: "Premium Pass",
               mobile: cleanMobile,
               skills: data.skills || [],
               graduation_year: data.graduationYear || null,
@@ -961,7 +995,7 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         user_id: userId,
         full_name: cleanName,
         college: cleanCollege,
-        team_code: cleanTeamCode,
+        team_code: officialTeamCode,
         mobile: cleanMobile,
         skills: data.skills || [],
         graduation_year: data.graduationYear || null,

@@ -133,4 +133,17 @@ describe("Premium Pass Eligibility — Mandatory Verification", () => {
     expect(resEnt.passCategory).toBe("Entertainment Pass");
     expect(resEnt.allowed).toBe(false);
   });
+
+  // 8. Strictly CNF-Based Registration without Team Code
+  it("verifies registration input strictly requires CNF and does not require team code", () => {
+    // Valid CNF with no team code supplied
+    const resWithoutTeam = verifyPassEligibility({
+      cnfNumber: "CNF-7EEEB1",
+    });
+    expect(resWithoutTeam.allowed).toBe(true);
+    expect(resWithoutTeam.cnf).toBe("CNF-7EEEB1");
+    expect(resWithoutTeam.passCategory).toBe("Premium Pass");
+    // Team code is automatically resolved from official roster for internal profile mapping
+    expect(resWithoutTeam.participant?.teamCode).toBe("KXBUKV");
+  });
 });
