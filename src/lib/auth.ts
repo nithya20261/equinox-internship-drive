@@ -59,6 +59,7 @@ export function useAuth() {
           } else {
             setUser(null);
           }
+
           setLoading(false);
           return;
         }
@@ -76,6 +77,7 @@ export function useAuth() {
             logoutUser();
             setUser(null);
           }
+
           setLoading(false);
           return;
         }
@@ -107,6 +109,7 @@ export function useAuth() {
         } else {
           setUser(null);
         }
+
       } finally {
         setLoading(false);
       }

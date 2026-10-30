@@ -39,7 +39,7 @@ export function SectionHead({ index, label, title, children }: { index?: string;
       </div>
       <div className="md:col-span-9">
         <Reveal>
-          <h2 className="font-display-title text-3xl sm:text-4xl md:text-5xl uppercase tracking-tight text-[#F7F2F6]">{title}</h2>
+          <h2 className="font-display-title text-2xl sm:text-4xl md:text-5xl uppercase tracking-tight text-[#F7F2F6] break-words">{title}</h2>
         </Reveal>
         {children && <div className="lede mt-4 max-w-2xl text-white/75">{children}</div>}
       </div>
@@ -58,7 +58,7 @@ export function PageHero({ label, title, children }: { label: string; title: Rea
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="font-display-title mt-4 max-w-5xl text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black uppercase tracking-tight text-[#F7F2F6]"
+          className="font-display-title mt-4 max-w-5xl text-3xl sm:text-5xl md:text-7xl lg:text-8xl font-black uppercase tracking-tight text-[#F7F2F6] break-words"
         >
           {title}
         </motion.h1>

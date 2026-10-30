@@ -15,11 +15,10 @@ export function AuthLayout({
   return (
     <Container className="py-10 sm:py-14">
       <div className="grid min-h-[75vh] rounded-3xl border-2 border-white/20 overflow-hidden shadow-[6px_6px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs lg:grid-cols-2">
-        <div className="flex flex-col justify-between brochure-grid-dense bg-[#151515] p-6 sm:p-8 md:p-12 text-[#F7F2F6] relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
+        <div className="flex flex-col justify-between brochure-grid-dense bg-[#151515] p-5 sm:p-8 md:p-12 text-[#F7F2F6] relative overflow-hidden border-b lg:border-b-0 lg:border-r border-white/20">
           <div className="absolute right-4 top-4 opacity-25 pointer-events-none">
             <WireframeGlobe size={180} strokeColor="#F7F2F6" accentColor="#33FF67" speed={0.005} />
           </div>
-
           <div className="relative z-10 max-w-full">
             <div className="flex items-center gap-2">
               <span className="pulse-dot h-2 w-2 rounded-full bg-[#33FF67]" />
@@ -44,7 +43,7 @@ export function AuthLayout({
           </div>
         </div>
 
-        <div className="bg-[#2A2A2A]/95 p-8 md:p-12 text-[#F7F2F6]">
+        <div className="bg-[#2A2A2A]/95 p-5 sm:p-8 md:p-12 text-[#F7F2F6]">
           {children}
         </div>
       </div>
@@ -72,7 +71,7 @@ export function RoleTabs({
           type="button"
           aria-selected={value === r}
           onClick={() => onChange(r)}
-          className={`font-sans text-sm font-semibold tracking-normal h-9 rounded-full transition-all ${
+          className={`font-sans text-sm font-semibold tracking-normal h-11 min-h-[44px] rounded-full transition-all ${
             value === r
               ? "bg-[#7484FE] text-[#151515] font-bold shadow-md"
               : "text-white/75 hover:text-white"

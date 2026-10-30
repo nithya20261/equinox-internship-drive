@@ -1,23 +1,52 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { pageMeta } from "@/lib/seo";
-import { Container, EmptyState, PageHero } from "@/components/site/primitives";
-import { FilterBar } from "@/components/site/Filters";
+import { Container, PageHero } from "@/components/site/primitives";
+import { OpportunityCard } from "@/components/site/blocks";
+import { INTERNSHIP_COMPANIES } from "@/data/companies";
+import type { Opportunity } from "@/lib/api";
 
 export const Route = createFileRoute("/companies/")({
-  head: () => pageMeta("Companies & Startups", "Directory of startups and companies participating in the Equinox E-Summit 2K26 Internship Drive. Announcements coming soon."),
+  head: () =>
+    pageMeta(
+      "Companies & Startups",
+      "Directory of startups and companies participating in the Equinox E-Summit 2K26 Internship Drive."
+    ),
   component: Companies,
 });
 
 function Companies() {
   return (
     <>
-      <PageHero label="Company directory" title={<>Startups &<br />companies.</>}>
+      <PageHero
+        label="Company directory"
+        title={
+          <>
+            Startups &<br />companies.
+          </>
+        }
+      >
         Organisations offering internships at Equinox 2K26. Browse by industry, company type and open roles.
       </PageHero>
       <Container className="py-14">
-        <FilterBar placeholder="Search companies" filters={["Industry / domain", "Company type", "Internship availability"]} />
-        <div className="mt-10">
-          <EmptyState title="Companies will be announced soon." body="The directory will list every participating startup and company with their open internships." />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {INTERNSHIP_COMPANIES.map((item, idx) => (
+            <OpportunityCard
+              key={item.id}
+              n={idx + 1}
+              item={{
+                id: item.id,
+                role: item.role || item.company,
+                company: item.company,
+                mode: item.mode,
+                duration: item.duration,
+                description: item.description,
+                requirement: item.requirement,
+                stipend: item.stipend,
+                status: "open",
+                created_at: new Date().toISOString(),
+              } as Opportunity}
+            />
+          ))}
         </div>
       </Container>
     </>

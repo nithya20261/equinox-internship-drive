@@ -21,7 +21,7 @@ function Contact() {
           ].map(([k, v]) => (
             <div key={k} className="border-b border-border py-5">
               <dt className="eyebrow text-muted-foreground">{k}</dt>
-              <dd className="headline mt-1 text-xl">{v}</dd>
+              <dd className="headline mt-1 text-base sm:text-xl break-words break-words-safe">{v}</dd>
             </div>
           ))}
           <div className="border-b border-border py-5">
@@ -33,7 +33,7 @@ function Contact() {
           <div><FieldLabel htmlFor="c-name">Name</FieldLabel><input id="c-name" className="field" autoComplete="name" /></div>
           <div><FieldLabel htmlFor="c-email">Email</FieldLabel><input id="c-email" type="email" className="field" autoComplete="email" /></div>
           <div><FieldLabel htmlFor="c-msg">Message</FieldLabel><textarea id="c-msg" rows={5} className="field h-auto py-3" /></div>
-          <button className="btn btn-ink" disabled aria-describedby="c-note">Send message</button>
+          <button className="btn btn-ink w-full sm:w-auto min-h-[44px]" disabled aria-describedby="c-note">Send message</button>
           <p id="c-note" className="text-sm text-muted-foreground">The contact form will go live with registration.</p>
         </form>
       </Container>

@@ -148,6 +148,14 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  input, select, textarea {
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    input, select, textarea {
+      font-size: 0.9375rem;
+    }
+  }
 }
 
 /* Official Equinox 2.0 Signature Risograph & Brochure Grids */
@@ -302,7 +310,8 @@
   color: #f7f2f6;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
+  font-size: 1rem;
+  min-height: 2.75rem;
   transition: border-color 160ms, box-shadow 160ms;
   &:focus {
     outline: none;
@@ -342,6 +351,11 @@
 }
 .event-card-container:hover {
   transform: translate(-1px, -1px);
+}
+
+.break-words-safe {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @keyframes marquee {
