@@ -79,3 +79,5 @@ export const INTERNSHIP_CATEGORIES = {
 } as const;
 
 export type InternshipTrack = "all" | "technical" | "non-technical";
+
+export { INTERNSHIP_COMPANIES, type InternshipListing } from "./companies";

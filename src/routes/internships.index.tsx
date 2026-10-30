@@ -76,9 +76,20 @@ function Internships() {
     const opRole = (op.role || "").toLowerCase();
     const opDomain = (op.domain || "").toLowerCase();
     const opLoc = (op.location || "").toLowerCase();
+    const opComp = (op.company || "").toLowerCase();
+    const opDesc = (op.description || "").toLowerCase();
+    const opReq = (op.requirement || "").toLowerCase();
 
     // 1. Search Query
-    if (q && !opRole.includes(q) && !opDomain.includes(q) && !opLoc.includes(q)) {
+    if (
+      q &&
+      !opRole.includes(q) &&
+      !opDomain.includes(q) &&
+      !opLoc.includes(q) &&
+      !opComp.includes(q) &&
+      !opDesc.includes(q) &&
+      !opReq.includes(q)
+    ) {
       return false;
     }
 
@@ -334,7 +345,7 @@ function Internships() {
             <Loader2 className="h-8 w-8 animate-spin text-[#33FF67]" />
           </div>
         ) : filtered.length > 0 ? (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((item, idx) => (
               <OpportunityCard
                 key={item.id}

@@ -78,7 +78,7 @@ const initialRoleForm: RoleFormData = {
 };
 
 function AdminConsole() {
-  const { user, isAdmin, loading, logout } = useAuth();
+  const { user, isAdmin, loading, login, logout } = useAuth();
 
   // Roles state
   const [roles, setRoles] = useState<any[]>([]);
@@ -183,10 +183,27 @@ function AdminConsole() {
             This area is strictly restricted to verified CIE administrators. Please log in with your administrator credentials.
           </p>
 
-          <div className="mt-6">
+          <div className="mt-6 flex flex-col gap-3">
             <Link to="/login" className="btn btn-signal w-full">
               Log in as Administrator
             </Link>
+
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                onClick={() => {
+                  login({
+                    id: "dev-admin-id",
+                    role: "admin",
+                    email: "equinoxcie@admin.equinox.internal",
+                    name: "CIE Administrator (Dev Mode)",
+                  });
+                }}
+                className="btn btn-line w-full text-xs font-mono text-[#33FF67] border-[#33FF67]/40 hover:bg-[#33FF67]/10"
+              >
+                ⚡ Development Mode: Open Admin Console
+              </button>
+            )}
           </div>
 
           <div className="mt-6 border-t border-[#2A2A2A] pt-4">

@@ -472,7 +472,7 @@ export function StudentApplicationForm({
                   </option>
                   {availableRoles.map((op) => (
                     <option key={op.id} value={op.id}>
-                      {op.role} ({op.domain})
+                      {op.role || op.company} {op.company ? `— ${op.company}` : `(${op.domain})`}
                     </option>
                   ))}
                 </>

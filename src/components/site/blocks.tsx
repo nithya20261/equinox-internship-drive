@@ -134,7 +134,7 @@ export function OpportunitySlot({
   );
 }
 
-/** Card representation of an internship opportunity for 4-in-a-row grids */
+/** Card representation of an internship opportunity for grids */
 export function OpportunityCard({
   n = 1,
   item,
@@ -150,17 +150,10 @@ export function OpportunityCard({
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }) {
-  const title = item?.role || "Internship Opportunity";
-  const domain = item?.domain || "General Domain";
-  const location = item?.location || "MLRIT Campus";
-  const mode = item?.mode || "onsite";
+  const company = item?.company;
+  const role = item?.role;
   const detailId = item?.id || "preview";
-
-  const skills: string[] = Array.isArray(item?.skills)
-    ? item.skills
-    : typeof item?.skills === "string"
-    ? item.skills.split(/[,•]/).map((s) => s.trim()).filter(Boolean)
-    : [];
+  const hasCompany = Boolean(company && company !== "Partner Organization (Confidential)");
 
   return (
     <article
@@ -169,22 +162,30 @@ export function OpportunityCard({
       }`}
     >
       <div>
-        {/* Top Header: Badge, Shield & Multi-select */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        {/* Top Header: Badge, Company Name / Shield & Multi-select */}
+        <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-[#151515] font-mono text-xs font-black text-[#7484FE]">
               {String(n).padStart(2, "0")}
             </div>
-            <div className="flex items-center gap-1 font-mono text-[10px] font-bold text-[#7484FE] uppercase">
-              <Shield className="h-3 w-3 text-[#33FF67]" />
-              <span>Shielded</span>
-            </div>
+            {hasCompany ? (
+              <span className="font-mono text-xs font-bold text-[#33FF67] uppercase tracking-wider truncate" title={company}>
+                {company}
+              </span>
+            ) : (
+              <div className="flex items-center gap-1 font-mono text-[10px] font-bold text-[#7484FE] uppercase">
+                <Shield className="h-3 w-3 text-[#33FF67]" />
+                <span>Shielded</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[#151515] px-2 py-0.5 font-mono text-[10px] text-[#7484FE]">
-              <Lock className="h-2.5 w-2.5" /> Confidential
-            </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {!hasCompany && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[#151515] px-2 py-0.5 font-mono text-[10px] text-[#7484FE]">
+                <Lock className="h-2.5 w-2.5" /> Confidential
+              </span>
+            )}
             {selectable && item?.id ? (
               <label
                 className="relative flex cursor-pointer items-center justify-center p-0.5"
@@ -195,47 +196,71 @@ export function OpportunityCard({
                   checked={isSelected}
                   onChange={() => onToggleSelect?.()}
                   className="h-4 w-4 rounded border border-white/30 bg-[#151515] accent-[#33FF67] cursor-pointer"
-                  aria-label={`Select ${title}`}
+                  aria-label={`Select ${role || company}`}
                 />
               </label>
             ) : null}
           </div>
         </div>
 
-        {/* Role Title */}
-        <h3 className="font-sans mt-3 text-base font-bold text-[#F7F2F6] group-hover:text-[#33FF67] transition-colors line-clamp-2 min-h-[3rem]">
-          {title}
-        </h3>
+        {/* Role Title (or Company Name if no specific role) */}
+        {(role || company) && (
+          <h3 className="font-sans mt-3 text-base sm:text-lg font-bold text-[#F7F2F6] group-hover:text-[#33FF67] transition-colors leading-snug">
+            {role || company}
+          </h3>
+        )}
 
-        {/* Specs Badges: Domain, Mode, Location */}
-        <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[11px]">
-          <span className="rounded border border-white/10 bg-[#151515] px-2 py-0.5 text-[#F7F2F6]/80 truncate max-w-full">
-            {domain}
-          </span>
-          <span className="rounded border border-white/10 bg-[#151515] px-2 py-0.5 text-[#33FF67] font-semibold">
-            {mode}
-          </span>
-          <span className="rounded border border-white/10 bg-[#151515] px-2 py-0.5 text-[#7484FE]">
-            {location}
-          </span>
-        </div>
+        {/* Student Forge Requirement (only if present) */}
+        {item?.requirement && (
+          <div className="mt-3 rounded-xl border border-white/10 bg-[#151515] p-3 text-xs font-sans text-white/90">
+            <span className="font-mono text-[10px] font-bold text-[#7484FE] uppercase tracking-wider block mb-1">
+              Requirement
+            </span>
+            <p className="leading-relaxed">{item.requirement}</p>
+          </div>
+        )}
 
-        {/* Skills Chips */}
-        {skills.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1">
-            {skills.slice(0, 3).map((sk, idx) => (
-              <span
-                key={idx}
-                className="rounded border border-white/10 bg-[#151515] px-1.5 py-0.5 font-mono text-[10px] text-[#F7F2F6]/70"
-              >
-                {sk}
-              </span>
-            ))}
-            {skills.length > 3 && (
-              <span className="self-center font-mono text-[10px] text-[#F7F2F6]/40">
-                +{skills.length - 3}
+        {/* Specs Badges: Mode, Duration, Stipend (ONLY show if given!) */}
+        {(item?.mode || item?.duration || item?.stipend) && (
+          <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[11px]">
+            {item.mode && (
+              <span className="rounded border border-white/10 bg-[#151515] px-2.5 py-1 text-white/80">
+                <span className="text-white/40 font-medium">Mode: </span>
+                <span className="text-[#33FF67] font-semibold">{item.mode}</span>
               </span>
             )}
+            {item.duration && (
+              <span className="rounded border border-white/10 bg-[#151515] px-2.5 py-1 text-white/80">
+                <span className="text-white/40 font-medium">Duration: </span>
+                <span className="text-[#7484FE] font-medium">{item.duration}</span>
+              </span>
+            )}
+            {item.stipend && (
+              <span className="rounded border border-white/10 bg-[#151515] px-2.5 py-1 text-white/80">
+                <span className="text-white/40 font-medium">Stipend: </span>
+                <span
+                  className={
+                    item.stipend.toLowerCase().startsWith("provided")
+                      ? "text-[#33FF67] font-semibold"
+                      : "text-white/60 font-medium"
+                  }
+                >
+                  {item.stipend}
+                </span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Job Description (ONLY show if given!) */}
+        {item?.description && (
+          <div className="mt-3 text-xs font-sans text-[#F7F2F6]/75 leading-relaxed">
+            <span className="font-mono text-[10px] font-bold text-white/90 uppercase tracking-wider block mb-1">
+              Job Description
+            </span>
+            <p className="line-clamp-4 group-hover:line-clamp-none transition-all">
+              {item.description}
+            </p>
           </div>
         )}
       </div>
