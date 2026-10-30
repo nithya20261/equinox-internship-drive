@@ -3,6 +3,7 @@ export interface InternshipListing {
   legacyId?: string;
   company: string;
   role?: string;
+  department?: string;
   requirement?: string;
   description?: string;
   mode?: string;
@@ -15,9 +16,10 @@ export interface InternshipListing {
 export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   {
     id: "d0000001-0000-0000-0000-000000000001",
-    legacyId: "soaron-aerospace-founder-office",
-    company: "Soaron Aerospace",
-    role: "Business Executive Intern (Founder's Office)",
+    legacyId: "business-executive-founder-office",
+    company: "Partner Organization (Confidential)",
+    role: "Business Executive Intern",
+    department: "Founder's Office",
     description:
       "Work directly with the Founder's Office on sales, marketing and business development. Connect with potential clients through calls, emails and social media, qualify leads, pitch solutions and follow up, and take part in negotiations and deal closures. Build and maintain a sales pipeline and track lead conversion. Plan and execute creative marketing campaigns, including social media content, reels and short-form videos. Contribute ideas, research and execution plans, and own assigned projects from idea to execution. Good to have: experience with CRM tools, Canva, CapCut or similar.",
     mode: "Hybrid (Bengaluru)",
@@ -27,8 +29,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000002-0000-0000-0000-000000000001",
-    legacyId: "aethriz-ai-ml-development",
-    company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
+    legacyId: "ai-ml-development",
+    company: "Partner Organization (Confidential)",
     role: "AI/ML Development",
     description:
       "Machine learning, healthcare AI systems, predictive modelling, and data-driven research.",
@@ -39,8 +41,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000002-0000-0000-0000-000000000002",
-    legacyId: "aethriz-app-development",
-    company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
+    legacyId: "app-development",
+    company: "Partner Organization (Confidential)",
     role: "App Development",
     description:
       "Cross-platform mobile applications, interface development, and system integration.",
@@ -51,8 +53,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000002-0000-0000-0000-000000000003",
-    legacyId: "aethriz-full-stack-web-development",
-    company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
+    legacyId: "full-stack-web-development",
+    company: "Partner Organization (Confidential)",
     role: "Full-Stack Web Development",
     description:
       "Frontend and backend development, APIs, databases, and scalable web applications.",
@@ -63,8 +65,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000002-0000-0000-0000-000000000004",
-    legacyId: "aethriz-social-media-management-marketing",
-    company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
+    legacyId: "social-media-management-marketing",
+    company: "Partner Organization (Confidential)",
     role: "Social Media Management and Marketing",
     description:
       "Content strategy, social media operations, digital campaigns, and audience engagement.",
@@ -75,8 +77,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000002-0000-0000-0000-000000000005",
-    legacyId: "aethriz-influencer-partnerships-management",
-    company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
+    legacyId: "influencer-partnerships-management",
+    company: "Partner Organization (Confidential)",
     role: "Influencer Partnerships and Management",
     description:
       "Creator outreach, influencer collaborations, and brand awareness initiatives.",
@@ -87,8 +89,8 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000002-0000-0000-0000-000000000006",
-    legacyId: "aethriz-graphics-design",
-    company: "Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)",
+    legacyId: "graphics-design",
+    company: "Partner Organization (Confidential)",
     role: "Graphics Design",
     description:
       "Brand identity, digital creatives, UI assets, and visual communication.",
@@ -99,18 +101,19 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000003-0000-0000-0000-000000000001",
-    legacyId: "vetria-ai-campus-ambassador",
-    company: "VetriaAI Innovation Pvt. Ltd. (VetriaAI & LaunchPadX)",
+    legacyId: "campus-ambassador",
+    company: "Partner Organization (Confidential)",
     role: "Campus Ambassador",
     description:
-      "Represent VetriaAI and LaunchPadX on your campus. Promote LaunchPadX programs, events, hackathons and workshops. Build and manage student communities on WhatsApp, LinkedIn and other platforms. Coordinate with college clubs, placement cells, faculty and student organizations. Share official announcements and promotional content, support outreach, event registrations and student onboarding, and share campus engagement updates with the VetriaAI team.",
+      "Represent the organization on your campus. Promote the organization's programs, events, hackathons and workshops. Build and manage student communities on WhatsApp, LinkedIn and other platforms. Coordinate with college clubs, placement cells, faculty and student organizations. Share official announcements and promotional content, support outreach, event registrations and student onboarding, and share campus engagement updates with the team.",
     mode: "Campus-based / Remote coordination",
     domain: "Public Relations, Media & Event Management",
   },
   {
     id: "d0000004-0000-0000-0000-000000000001",
-    legacyId: "student-forge-requirement",
-    company: "Student Forge",
+    legacyId: "tech-marketing-web-dev",
+    company: "Partner Organization (Confidential)",
+    role: "Tech, Marketing & Web Dev",
     requirement: "10+ people from tech and marketing; 2 from web dev",
     domain: "General",
   },

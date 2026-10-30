@@ -62,7 +62,7 @@ BEGIN
   VALUES
     (
       'c0000001-0000-0000-0000-000000000001',
-      'Soaron Aerospace',
+      'Partner Organization',
       'Aerospace & Defense',
       'Cutting-edge aerospace and technology ventures.',
       now(),
@@ -70,7 +70,7 @@ BEGIN
     ),
     (
       'c0000002-0000-0000-0000-000000000002',
-      'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+      'Partner Organization',
       'Healthcare & Artificial Intelligence',
       'Pioneering AI systems, healthcare predictive modelling, and research.',
       now(),
@@ -78,7 +78,7 @@ BEGIN
     ),
     (
       'c0000003-0000-0000-0000-000000000003',
-      'VetriaAI Innovation Pvt. Ltd. (VetriaAI & LaunchPadX)',
+      'Partner Organization',
       'AI & Student Innovation Programs',
       'Next-gen AI innovation and student launchpad ecosystem.',
       now(),
@@ -86,7 +86,7 @@ BEGIN
     ),
     (
       'c0000004-0000-0000-0000-000000000004',
-      'Student Forge',
+      'Partner Organization',
       'Talent & Tech Incubator',
       'Incubating student talent across technology, web development, and marketing.',
       now(),
@@ -122,7 +122,7 @@ BEGIN
     v_default_company_id := 'c0000001-0000-0000-0000-000000000001';
   END IF;
 
-  -- 1) Soaron Aerospace: Business Executive Intern (Founder's Office)
+  -- 1) Partner Organization: Business Executive Intern (Founder's Office)
   INSERT INTO public.internships (
     id,
     company_id,
@@ -144,9 +144,9 @@ BEGIN
   )
   VALUES (
     'd0000001-0000-0000-0000-000000000001',
-    COALESCE((SELECT id FROM public.companies WHERE name = 'Soaron Aerospace' LIMIT 1), v_default_company_id),
-    'Soaron Aerospace',
-    'Business Executive Intern (Founder''s Office)',
+    COALESCE((SELECT id FROM public.companies WHERE name = 'Partner Organization' LIMIT 1), v_default_company_id),
+    'Partner Organization',
+    'Business Executive Intern',
     'Business Development & Corporate Sales',
     'Bengaluru',
     'hybrid',
@@ -171,7 +171,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 2) Aethriz: AI/ML Development
+  -- 2) Partner Organization: AI/ML Development
   INSERT INTO public.internships (
     id,
     company_id,
@@ -193,8 +193,8 @@ BEGIN
   )
   VALUES (
     'd0000002-0000-0000-0000-000000000001',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Aethriz%' LIMIT 1), v_default_company_id),
-    'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'AI/ML Development',
     'Artificial Intelligence & Machine Learning',
     '100% Remote',
@@ -220,7 +220,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 3) Aethriz: App Development
+  -- 3) Partner Organization: App Development
   INSERT INTO public.internships (
     id,
     company_id,
@@ -242,8 +242,8 @@ BEGIN
   )
   VALUES (
     'd0000002-0000-0000-0000-000000000002',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Aethriz%' LIMIT 1), v_default_company_id),
-    'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'App Development',
     'Mobile App Development',
     '100% Remote',
@@ -269,7 +269,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 4) Aethriz: Full-Stack Web Development
+  -- 4) Partner Organization: Full-Stack Web Development
   INSERT INTO public.internships (
     id,
     company_id,
@@ -291,8 +291,8 @@ BEGIN
   )
   VALUES (
     'd0000002-0000-0000-0000-000000000003',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Aethriz%' LIMIT 1), v_default_company_id),
-    'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'Full-Stack Web Development',
     'Full-Stack Web Development',
     '100% Remote',
@@ -318,7 +318,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 5) Aethriz: Social Media Management and Marketing
+  -- 5) Partner Organization: Social Media Management and Marketing
   INSERT INTO public.internships (
     id,
     company_id,
@@ -340,8 +340,8 @@ BEGIN
   )
   VALUES (
     'd0000002-0000-0000-0000-000000000004',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Aethriz%' LIMIT 1), v_default_company_id),
-    'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'Social Media Management and Marketing',
     'Digital Marketing, SEO & Growth Hacking',
     '100% Remote',
@@ -367,7 +367,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 6) Aethriz: Influencer Partnerships and Management
+  -- 6) Partner Organization: Influencer Partnerships and Management
   INSERT INTO public.internships (
     id,
     company_id,
@@ -389,8 +389,8 @@ BEGIN
   )
   VALUES (
     'd0000002-0000-0000-0000-000000000005',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Aethriz%' LIMIT 1), v_default_company_id),
-    'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'Influencer Partnerships and Management',
     'Public Relations, Media & Event Management',
     '100% Remote',
@@ -416,7 +416,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 7) Aethriz: Graphics Design
+  -- 7) Partner Organization: Graphics Design
   INSERT INTO public.internships (
     id,
     company_id,
@@ -438,8 +438,8 @@ BEGIN
   )
   VALUES (
     'd0000002-0000-0000-0000-000000000006',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Aethriz%' LIMIT 1), v_default_company_id),
-    'Aethriz AI Healthcare and Advanced Research Pvt. Ltd. (Winter Internship Programme 2026-27)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'Graphics Design',
     'UI/UX Design & Product Experience',
     '100% Remote',
@@ -465,7 +465,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 8) VetriaAI: Campus Ambassador
+  -- 8) Partner Organization: Campus Ambassador
   INSERT INTO public.internships (
     id,
     company_id,
@@ -487,8 +487,8 @@ BEGIN
   )
   VALUES (
     'd0000003-0000-0000-0000-000000000001',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Vetria%' LIMIT 1), v_default_company_id),
-    'VetriaAI Innovation Pvt. Ltd. (VetriaAI & LaunchPadX)',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
     'Campus Ambassador',
     'Public Relations, Media & Event Management',
     'Campus-based / Remote coordination',
@@ -496,7 +496,7 @@ BEGIN
     NULL,
     NULL,
     NULL,
-    'Represent VetriaAI and LaunchPadX on your campus. Promote LaunchPadX programs, events, hackathons and workshops. Build and manage student communities on WhatsApp, LinkedIn and other platforms. Coordinate with college clubs, placement cells, faculty and student organizations. Share official announcements and promotional content, support outreach, event registrations and student onboarding, and share campus engagement updates with the VetriaAI team.',
+    'Represent the organization on your campus. Promote the organization's programs, events, hackathons and workshops. Build and manage student communities on WhatsApp, LinkedIn and other platforms. Coordinate with college clubs, placement cells, faculty and student organizations. Share official announcements and promotional content, support outreach, event registrations and student onboarding, and share campus engagement updates with the team.',
     ARRAY['Campus representation', 'Community management', 'Student outreach', 'Event coordination'],
     ARRAY['Community Building', 'Outreach', 'Networking', 'Leadership'],
     'Open to all registered Equinox attendees',
@@ -514,7 +514,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 9) Student Forge: Requirement
+  -- 9) Partner Organization: Requirement
   INSERT INTO public.internships (
     id,
     company_id,
@@ -536,9 +536,9 @@ BEGIN
   )
   VALUES (
     'd0000004-0000-0000-0000-000000000001',
-    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Student Forge%' LIMIT 1), v_default_company_id),
-    'Student Forge',
-    'Student Forge Opportunity',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
+    'Tech, Marketing & Web Dev',
     'General',
     'MLRIT Campus / Hyderabad',
     NULL,

@@ -37,6 +37,7 @@ export interface StudentRegistrationInput {
 export interface Opportunity {
   id: string;
   role: string;
+  department?: string;
   domain?: string;
   location?: string;
   mode?: string;
@@ -405,7 +406,8 @@ export async function loginAdmin(credentials: { username: string; password: stri
 export async function getOpportunities(): Promise<Opportunity[]> {
   const companyListings: Opportunity[] = INTERNSHIP_COMPANIES.map((item) => ({
     id: item.id,
-    role: item.role || item.company,
+    role: item.role || "Internship Role",
+    department: item.department,
     company: item.company,
     domain: item.domain || "General",
     mode: item.mode,
@@ -449,7 +451,8 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
   if (found) {
     return {
       id: found.id,
-      role: found.role || found.company,
+      role: found.role || "Internship Role",
+      department: found.department,
       company: found.company,
       domain: found.domain || "General",
       mode: found.mode,

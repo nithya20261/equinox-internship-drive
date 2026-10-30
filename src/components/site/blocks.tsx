@@ -150,10 +150,10 @@ export function OpportunityCard({
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }) {
-  const company = item?.company;
+  const department = item?.department;
   const role = item?.role;
   const detailId = item?.id || "preview";
-  const hasCompany = Boolean(company && company !== "Partner Organization (Confidential)");
+
 
   return (
     <article
@@ -168,24 +168,16 @@ export function OpportunityCard({
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-[#151515] font-mono text-xs font-black text-[#7484FE]">
               {String(n).padStart(2, "0")}
             </div>
-            {hasCompany ? (
-              <span className="font-mono text-xs font-bold text-[#33FF67] uppercase tracking-wider truncate" title={company}>
-                {company}
-              </span>
-            ) : (
-              <div className="flex items-center gap-1 font-mono text-[10px] font-bold text-[#7484FE] uppercase">
+            <div className="flex items-center gap-1 font-mono text-[10px] font-bold text-[#7484FE] uppercase">
                 <Shield className="h-3 w-3 text-[#33FF67]" />
                 <span>Shielded</span>
               </div>
-            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {!hasCompany && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[#151515] px-2 py-0.5 font-mono text-[10px] text-[#7484FE]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[#151515] px-2 py-0.5 font-mono text-[10px] text-[#7484FE]">
                 <Lock className="h-2.5 w-2.5" /> Confidential
               </span>
-            )}
             {selectable && item?.id ? (
               <label
                 className="relative flex cursor-pointer items-center justify-center p-0.5"
@@ -196,21 +188,28 @@ export function OpportunityCard({
                   checked={isSelected}
                   onChange={() => onToggleSelect?.()}
                   className="h-4 w-4 rounded border border-white/30 bg-[#151515] accent-[#33FF67] cursor-pointer"
-                  aria-label={`Select ${role || company}`}
+                  aria-label={`Select ${role || "internship"}`}
                 />
               </label>
             ) : null}
           </div>
         </div>
 
-        {/* Role Title (or Company Name if no specific role) */}
-        {(role || company) && (
-          <h3 className="font-sans mt-3 text-base sm:text-lg font-bold text-[#F7F2F6] group-hover:text-[#33FF67] transition-colors leading-snug">
-            {role || company}
-          </h3>
+        {/* Role Title */}
+        {role && (
+          <div className="mt-3">
+            <h3 className="font-sans text-base sm:text-lg font-bold text-[#F7F2F6] group-hover:text-[#33FF67] transition-colors leading-snug">
+              {role}
+            </h3>
+            {department && (
+              <span className="mt-1.5 inline-block rounded border border-[#7484FE]/30 bg-[#7484FE]/10 px-2 py-0.5 font-mono text-[10px] text-[#7484FE] uppercase tracking-wider font-semibold">
+                {department}
+              </span>
+            )}
+          </div>
         )}
 
-        {/* Student Forge Requirement (only if present) */}
+        {/* Role Requirement (only if present) */}
         {item?.requirement && (
           <div className="mt-3 rounded-xl border border-white/10 bg-[#151515] p-3 text-xs font-sans text-white/90">
             <span className="font-mono text-[10px] font-bold text-[#7484FE] uppercase tracking-wider block mb-1">

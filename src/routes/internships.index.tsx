@@ -76,7 +76,7 @@ function Internships() {
     const opRole = (op.role || "").toLowerCase();
     const opDomain = (op.domain || "").toLowerCase();
     const opLoc = (op.location || "").toLowerCase();
-    const opComp = (op.company || "").toLowerCase();
+    const opDept = (op.department || "").toLowerCase();
     const opDesc = (op.description || "").toLowerCase();
     const opReq = (op.requirement || "").toLowerCase();
 
@@ -86,7 +86,7 @@ function Internships() {
       !opRole.includes(q) &&
       !opDomain.includes(q) &&
       !opLoc.includes(q) &&
-      !opComp.includes(q) &&
+      !opDept.includes(q) &&
       !opDesc.includes(q) &&
       !opReq.includes(q)
     ) {

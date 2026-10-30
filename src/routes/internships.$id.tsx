@@ -132,7 +132,7 @@ function Detail() {
           {roleTitle}
         </h1>
 
-        {/* Student Forge Requirement (if present) */}
+        {/* Role Requirement (if present) */}
         {opportunity?.requirement && (
           <div className="mt-5 rounded-xl border border-white/10 bg-[#1e1e1e] p-4 text-sm font-sans text-white/90">
             <span className="font-mono text-xs font-bold text-[#7484FE] uppercase tracking-wider block mb-1">
