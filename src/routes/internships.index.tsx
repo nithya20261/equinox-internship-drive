@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   ArrowRight,
-  Lock,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -14,7 +13,7 @@ import {
 } from "lucide-react";
 import { pageMeta } from "@/lib/seo";
 import { Container, EmptyState, PageHero } from "@/components/site/primitives";
-import { OpportunityCard, OpportunitySlot } from "@/components/site/blocks";
+import { OpportunityCard } from "@/components/site/blocks";
 import { useAuth } from "@/lib/auth";
 import {
   getOpportunities,
@@ -181,52 +180,9 @@ function Internships() {
             internship.
           </>
         }
-      >
-        Explore 20 curated Technical and Non-technical categories. Multi-select roles and apply in
-        one seamless session with your choice of resume.
-      </PageHero>
+      />
 
-      <Container className="max-w-[1440px] py-14">
-        {/* Auth notice banner when not logged in */}
-        {!isLoggedIn && (
-          <div className="mb-10 flex flex-col items-start justify-between gap-4 rounded-2xl border-2 border-white/20 bg-[#2A2A2A]/90 p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.35)] backdrop-blur-xs sm:flex-row sm:items-center">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-[#151515] text-[#33FF67]">
-                <Lock className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="headline text-xl md:text-2xl text-[#F7F2F6]">
-                  Login Required to Apply
-                </h2>
-                <p className="mt-1 text-sm text-[#F7F2F6]/60">
-                  Log in as a registered student to submit multi-role applications and track status
-                  live.
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Link to="/login" className="btn btn-line h-10 px-4">
-                Log in
-              </Link>
-              <Link to="/register" className="btn btn-signal h-10 px-4">
-                Register
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* Confidentiality protocol notice */}
-        <div className="mb-6 flex items-center justify-between rounded-full border border-white/20 bg-[#151515] px-5 py-2.5 text-xs font-mono text-white/80">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#33FF67]" />
-            <span className="text-[#33FF67] font-bold uppercase">RECRUITER SHIELD ACTIVE:</span>
-            <span>Hiring partner identities are concealed to guarantee merit-based review.</span>
-          </div>
-          <span className="hidden sm:inline-block text-[#7484FE]">
-            Confidential Candidate Pool
-          </span>
-        </div>
-
+      <Container className="max-w-[1440px] py-10">
         {/* Track Selection Tabs */}
         <div className="mb-6 grid grid-cols-3 p-1 rounded-full border border-white/20 bg-[#151515]">
           {[
