@@ -141,6 +141,7 @@ async function resetDurableRateLimit(key: string): Promise<void> {
 
 export interface StudentAuthPayload {
   cnfNumber?: string | undefined;
+  email?: string | undefined;
   password: string;
   fullName?: string | undefined;
   teamCode?: string | undefined;
@@ -152,53 +153,153 @@ export interface AdminAuthPayload {
 }
 
 /**
- * Server function: Authenticates student strictly using Confirmation Number (CNF) + Password.
- * Password must be the exact same CNF number. Only confirmed students in the master list are allowed.
+ * Server function: Authenticates student via Confirmation Number (CNF) + Password OR registered Email + Password.
+ * Supports both:
+ * 1. Confirmed students logging in with their assigned CNF number (e.g. CNF000 or CNF-F6D524).
+ * 2. Self-registered students logging in with their registered email address and custom password.
  */
 export const loginStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentAuthPayload) => data)
   .handler(async ({ data }) => {
-    const rawInput = (data.cnfNumber || data.teamCode || "").trim();
-    const rawCnf = rawInput.toUpperCase();
-    const cleanPassword = data.password.trim();
+    const rawInput = (data.email || data.cnfNumber || data.teamCode || "").trim();
+    const cleanPassword = (data.password || "").trim();
+
+    if (!rawInput || !cleanPassword) {
+      throw new Error("Confirmation number or email and password are required.");
+    }
+
     const serverClient = getServerSupabase();
     const anonClient = getServerAnonClient();
 
-    // 0. If candidate entered an email address, authenticate directly
+    // =========================================================================
+    // METHOD 1: Registered Email Authentication (Self-registered students)
+    // =========================================================================
     if (rawInput.includes("@")) {
-      const { data: emailAuth } = await anonClient.auth.signInWithPassword({
-        email: rawInput.toLowerCase(),
+      const cleanEmail = rawInput.toLowerCase();
+      const rateLimitKey = `student:email:${cleanEmail}`;
+      await verifyDurableRateLimit(rateLimitKey);
+
+      const { data: emailAuth, error: emailAuthError } = await anonClient.auth.signInWithPassword({
+        email: cleanEmail,
         password: cleanPassword,
       });
-      if (emailAuth?.session && emailAuth?.user) {
-        return emailAuth;
+
+      if (emailAuthError || !emailAuth?.session || !emailAuth?.user) {
+        throw new Error(
+          emailAuthError?.message || "Invalid email or password. Please check your credentials or register for an account."
+        );
       }
-    } else {
-      // Check if candidate registered via self-service under this team code
-      const { data: registeredStudent } = await serverClient
-        .from("students")
-        .select("user_id, team_code, full_name")
-        .ilike("team_code", rawInput)
+
+      // Role check: Ensure administrator accounts use the admin login portal
+      const { data: profile } = await serverClient
+        .from("profiles")
+        .select("id, role, full_name, college")
+        .eq("id", emailAuth.user.id)
         .maybeSingle();
 
-      if (registeredStudent?.user_id) {
-        const { data: prof } = await serverClient
-          .from("profiles")
-          .select("email")
-          .eq("id", registeredStudent.user_id)
-          .maybeSingle();
+      if (profile?.role === "admin") {
+        throw new Error("This is an administrator account. Please use the Admin Login tab.");
+      }
 
-        if (prof?.email) {
-          const { data: teamAuth } = await anonClient.auth.signInWithPassword({
-            email: prof.email.toLowerCase(),
-            password: cleanPassword,
-          });
-          if (teamAuth?.session && teamAuth?.user) {
-            return teamAuth;
-          }
+      // Ensure profile and student rows exist and are properly mapped
+      const displayName =
+        profile?.full_name ||
+        (emailAuth.user.user_metadata?.["full_name"] as string | undefined) ||
+        (data.fullName as string | undefined) ||
+        cleanEmail.split("@")[0];
+
+      if (!profile) {
+        await serverClient.from("profiles").upsert({
+          id: emailAuth.user.id,
+          role: "student",
+          email: cleanEmail,
+          full_name: displayName,
+        });
+      }
+
+      const { data: existingStudent } = await serverClient
+        .from("students")
+        .select("id, team_code, full_name")
+        .eq("user_id", emailAuth.user.id)
+        .maybeSingle();
+
+      const teamCode =
+        existingStudent?.team_code ||
+        (emailAuth.user.user_metadata?.["team_code"] as string | undefined) ||
+        "EQX-STUDENT";
+
+      if (!existingStudent) {
+        await serverClient.from("students").upsert({
+          user_id: emailAuth.user.id,
+          full_name: displayName,
+          team_code: teamCode,
+          college: (emailAuth.user.user_metadata?.["college"] as string | undefined) || "MLR Institute of Technology",
+        });
+      }
+
+      await resetDurableRateLimit(rateLimitKey);
+
+      return {
+        session: emailAuth.session,
+        user: {
+          ...emailAuth.user,
+          user_metadata: {
+            ...emailAuth.user.user_metadata,
+            role: "student",
+            full_name: displayName,
+            team_code: teamCode,
+          },
+        },
+      };
+    }
+
+    // =========================================================================
+    // METHOD 1B: Self-registered Team Code Authentication
+    // =========================================================================
+    const { data: registeredStudent } = await serverClient
+      .from("students")
+      .select("user_id, team_code, full_name")
+      .ilike("team_code", rawInput)
+      .maybeSingle();
+
+    if (registeredStudent?.user_id) {
+      const { data: prof } = await serverClient
+        .from("profiles")
+        .select("email, role, full_name")
+        .eq("id", registeredStudent.user_id)
+        .maybeSingle();
+
+      if (prof?.email && prof.role !== "admin") {
+        const teamRateLimitKey = `student:email:${prof.email.toLowerCase()}`;
+        await verifyDurableRateLimit(teamRateLimitKey);
+
+        const { data: teamAuth, error: teamAuthError } = await anonClient.auth.signInWithPassword({
+          email: prof.email.toLowerCase(),
+          password: cleanPassword,
+        });
+
+        if (teamAuth?.session && teamAuth?.user) {
+          await resetDurableRateLimit(teamRateLimitKey);
+          return {
+            session: teamAuth.session,
+            user: {
+              ...teamAuth.user,
+              user_metadata: {
+                ...teamAuth.user.user_metadata,
+                role: "student",
+                full_name: registeredStudent.full_name || prof.full_name,
+                team_code: registeredStudent.team_code,
+              },
+            },
+          };
         }
       }
     }
+
+    // =========================================================================
+    // METHOD 2: Official Confirmed CNF Authentication (Event Master Roster)
+    // =========================================================================
+    const rawCnf = rawInput.toUpperCase();
 
     // 1. Check pre-loaded master confirmed list
     let confirmedStudent = getConfirmedStudent(rawCnf);

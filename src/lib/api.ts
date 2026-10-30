@@ -250,21 +250,25 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
     }
 
     if (clientUser) {
-      await supabase.from("profiles").upsert({
-        id: clientUser.id,
-        role: "student",
-        email: cleanEmail,
-        full_name: cleanName,
-        college: input.college.trim(),
-      }).catch(() => {});
+      try {
+        await supabase.from("profiles").upsert({
+          id: clientUser.id,
+          role: "student",
+          email: cleanEmail,
+          full_name: cleanName,
+          college: input.college.trim(),
+        });
+      } catch {}
 
-      await supabase.from("students").upsert({
-        user_id: clientUser.id,
-        full_name: cleanName,
-        college: input.college.trim(),
-        team_code: cleanTeamCode,
-        mobile: input.mobile.trim(),
-      }).catch(() => {});
+      try {
+        await supabase.from("students").upsert({
+          user_id: clientUser.id,
+          full_name: cleanName,
+          college: input.college.trim(),
+          team_code: cleanTeamCode,
+          mobile: input.mobile.trim(),
+        });
+      } catch {}
 
       loginUser({
         id: clientUser.id,
@@ -299,15 +303,17 @@ export async function loginStudent(credentials: {
   name?: string;
   password: string;
 }) {
-  const rawInput = (credentials.cnfNumber || credentials.teamCode || credentials.email || "").trim();
-  const cnfNumber = rawInput.toUpperCase();
+  const rawInput = (credentials.email || credentials.cnfNumber || credentials.teamCode || "").trim();
+  const isEmail = rawInput.includes("@");
+  const cnfNumber = isEmail ? rawInput.toLowerCase() : rawInput.toUpperCase();
   const fullName = (credentials.name || "").trim();
   const cleanPassword = credentials.password.trim();
 
-  // Execute server-side authenticated flow with rate-limiting & zero email leakage
+  // Execute server-side authenticated flow supporting both CNF numbers and registered emails
   try {
     const result = await loginStudentServerFn({
       data: {
+        email: isEmail ? rawInput.toLowerCase() : undefined,
         cnfNumber,
         fullName,
         teamCode: cnfNumber,

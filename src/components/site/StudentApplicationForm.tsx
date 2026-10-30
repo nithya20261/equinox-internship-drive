@@ -54,35 +54,6 @@ export function StudentApplicationForm({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Pre-fill real student profile information when logged in
-  useEffect(() => {
-    if (user) {
-      if (!fullName) {
-        if (user.fullName && !user.fullName.toLowerCase().startsWith("cnf") && !user.fullName.includes("XXX")) {
-          setFullName(user.fullName);
-        } else if (user.name && !user.name.toLowerCase().startsWith("cnf") && !user.name.includes("XXX")) {
-          setFullName(user.name);
-        }
-      }
-
-      if (!email && user.email) {
-        setEmail(user.email);
-      }
-
-      if (!contactNumber && user.mobile && user.mobile !== "N/A") {
-        setContactNumber(user.mobile);
-      }
-
-      if (!instituteAndBranch) {
-        if (user.college && user.branch) {
-          setInstituteAndBranch(`${user.college} - ${user.branch}`);
-        } else if (user.college) {
-          setInstituteAndBranch(user.college);
-        }
-      }
-    }
-  }, [user, fullName, email, contactNumber, instituteAndBranch]);
-
   // Load available roles dynamically from Supabase
   useEffect(() => {
     let mounted = true;
@@ -127,7 +98,7 @@ export function StudentApplicationForm({
     if (!trimmedName) {
       errors.fullName = "Full name is required.";
     } else if (trimmedName.toLowerCase().startsWith("cnf") || /x{3,}/i.test(trimmedName)) {
-      errors.fullName = "Please enter your actual full name (e.g. Shreyas or A. Sharanya).";
+      errors.fullName = "Please enter your actual full name.";
     } else if (!/^[a-zA-Z\s\.\'-]{2,60}$/.test(trimmedName)) {
       errors.fullName = "Full name must contain only letters, dots, and spaces (2-60 chars).";
     }
@@ -335,7 +306,7 @@ export function StudentApplicationForm({
               required
               value={fullName}
               onChange={handleTextChange("fullName", setFullName)}
-              placeholder="e.g. Shreyas"
+              placeholder="Enter your full name"
               className={`w-full rounded-lg border bg-black/60 px-4 py-2.5 font-sans text-xs text-[#F7F2F6] placeholder:text-[#F7F2F6]/30 focus:border-[#7484FE] focus:ring-1 focus:ring-[#7484FE] outline-none transition-all ${
                 fieldErrors.fullName ? "border-red-500/60" : "border-white/20"
               }`}
@@ -526,6 +497,9 @@ export function StudentApplicationForm({
                 {fieldErrors.resumeFile}
               </p>
             )}
+            <p className="mt-2.5 text-[11px] font-mono text-amber-300/90 leading-relaxed">
+              <span className="text-amber-400 font-bold">*</span> Resume file must be named as <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">CNFNUMBER_NAME</code> (e.g. <span className="text-white">CNF000_YOURNAME.pdf</span>). <span className="text-amber-200 font-semibold underline">Only those will be considered.*</span>
+            </p>
           </div>
         </div>
 
@@ -557,7 +531,24 @@ export function StudentApplicationForm({
                 {fieldErrors.videoUrl}
               </p>
             )}
+            <p className="mt-2.5 text-[11px] font-mono text-amber-300/90 leading-relaxed">
+              <span className="text-amber-400 font-bold">*</span> Video file in Google Drive must be named as <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">CNFNUMBER_NAME</code> (e.g. <span className="text-white">CNF000_YOURNAME.mp4</span>). <span className="text-amber-200 font-semibold underline">Only those will be considered.*</span>
+            </p>
           </div>
+        </div>
+
+        {/* Mandatory File Naming Notice */}
+        <div className="col-span-1 md:col-span-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs font-mono text-amber-300">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+          <p className="leading-relaxed">
+            <strong className="text-amber-400 font-bold uppercase tracking-wider">MANDATORY FILE NAMING:</strong>{" "}
+            Both your Resume file and Video file must be named as{" "}
+            <code className="bg-black/80 px-2 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">
+              CNFNUMBER_NAME
+            </code>{" "}
+            (e.g., <span className="text-white">CNF000_YOURNAME</span>).{" "}
+            <strong className="text-amber-200 underline">Only those will be considered.*</strong>
+          </p>
         </div>
 
         {/* BLOCK 08: Relevant Skills */}
