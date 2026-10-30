@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getConfirmedStudent } from "@/data/confirmed-students";
+import { verifyPassEligibility } from "@/lib/pass-eligibility";
 
 // 1. Separate anon/publishable-key client for standard user authentication (auth.signInWithPassword)
 let cachedAnonClient: SupabaseClient | null = null;

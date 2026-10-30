@@ -3,7 +3,7 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { pageMeta } from "@/lib/seo";
 import { AuthLayout } from "@/components/site/AuthLayout";
 import { FieldLabel } from "@/components/site/primitives";
-import { CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
+import { CheckCircle2, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { registerStudentWithResume } from "@/lib/api";
 
 export const Route = createFileRoute("/register")({
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/register")({
 
 interface StudentFormState {
   fullName: string;
+  cnfNumber: string;
   college: string;
   teamCode: string;
   mobile: string;
@@ -31,6 +32,7 @@ function Register() {
 
   const [studentForm, setStudentForm] = useState<StudentFormState>({
     fullName: "",
+    cnfNumber: "",
     college: "",
     teamCode: "",
     mobile: "",
@@ -50,13 +52,14 @@ function Register() {
 
     if (
       !studentForm.fullName.trim() ||
+      !studentForm.cnfNumber.trim() ||
       !studentForm.college.trim() ||
       !studentForm.teamCode.trim() ||
       !studentForm.mobile.trim() ||
       !studentForm.email.trim() ||
       !studentForm.password.trim()
     ) {
-      setErrorMessage("Please fill in all required fields.");
+      setErrorMessage("Please fill in all required fields, including your Confirmation (CNF) Number.");
       return;
     }
     if (!studentForm.email.includes("@")) {
@@ -72,6 +75,7 @@ function Register() {
       setIsSubmitting(true);
       await registerStudentWithResume({
         full_name: studentForm.fullName,
+        cnf_number: studentForm.cnfNumber.trim().toUpperCase(),
         college: studentForm.college,
         team_code: studentForm.teamCode,
         mobile: studentForm.mobile,
@@ -115,10 +119,18 @@ function Register() {
               </p>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Welcome, {studentForm.fullName}! Your registration has been securely created under team code {studentForm.teamCode}.
+              Welcome, {studentForm.fullName}! Your registration has been verified with a confirmed Premium Pass.
             </p>
 
             <div className="mt-4 divide-y divide-border border-t border-border pt-4 text-xs">
+              <div className="flex justify-between py-1.5">
+                <span className="text-muted-foreground">Confirmation (CNF)</span>
+                <span className="font-mono font-bold text-[#33FF67]">{studentForm.cnfNumber.toUpperCase()}</span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-muted-foreground">Pass Category</span>
+                <span className="font-mono font-medium text-[#33FF67]">Premium Pass (Verified)</span>
+              </div>
               <div className="flex justify-between py-1.5">
                 <span className="text-muted-foreground">College</span>
                 <span className="font-mono font-medium">{studentForm.college}</span>
@@ -165,7 +177,15 @@ function Register() {
         Equinox E-Summit 2K26 · Candidate Registration
       </p>
 
-      <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+      {/* Premium Pass Notice Callout */}
+      <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-mono text-emerald-300">
+        <AlertCircle className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+        <p className="leading-relaxed">
+          <strong className="text-emerald-400 font-bold uppercase">PREMIUM PASS REQUIRED:</strong> The Equinox Internship Drive is exclusively available to participants with a verified <strong className="text-white">Premium Pass</strong>. Entertainment Pass holders are not eligible.
+        </p>
+      </div>
+
+      <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
         {errorMessage && (
           <div
             className="flex items-center gap-2 border-l-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive"
@@ -184,10 +204,29 @@ function Register() {
             value={studentForm.fullName}
             onChange={handleStudentChange}
             autoComplete="name"
-            placeholder="e.g. Aditi Rao"
+            placeholder="Enter your full name"
             className="field"
             required
           />
+        </div>
+
+        <div>
+          <FieldLabel htmlFor="r-cnf-number" hint="e.g. CNF-7EEEB1 (From your registration confirmation)">
+            Confirmation Number (CNF) *
+          </FieldLabel>
+          <input
+            id="r-cnf-number"
+            name="cnfNumber"
+            type="text"
+            value={studentForm.cnfNumber}
+            onChange={handleStudentChange}
+            placeholder="e.g. CNF-7EEEB1"
+            className="field uppercase font-mono tracking-wider"
+            required
+          />
+          <p className="mt-1 text-[11px] font-mono text-emerald-400/90">
+            * Must match your official Equinox Premium Pass registration.
+          </p>
         </div>
 
         <div>
@@ -213,7 +252,7 @@ function Register() {
               type="text"
               value={studentForm.teamCode}
               onChange={handleStudentChange}
-              placeholder="e.g. EQX-408"
+              placeholder="e.g. KXBUKV"
               className="field uppercase"
               required
             />
@@ -264,8 +303,6 @@ function Register() {
           />
         </div>
 
-
-
         <button
           type="submit"
           disabled={isSubmitting}
@@ -274,7 +311,7 @@ function Register() {
           {isSubmitting ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Creating Account...
+              Verifying Pass &amp; Creating Account...
             </span>
           ) : (
             "Complete Registration"
@@ -284,7 +321,7 @@ function Register() {
         <p className="text-center text-xs text-muted-foreground">
           Already registered?{" "}
           <Link to="/login" className="underline hover:text-foreground">
-            Sign in with Team Code or Email
+            Sign in with CNF Number or Email
           </Link>
         </p>
       </form>

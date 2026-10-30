@@ -28,10 +28,11 @@ export interface StudentRegistrationInput {
   password: string;
   college: string;
   team_code: string;
+  cnf_number?: string | undefined;
   mobile: string;
-  skills?: string[];
-  graduation_year?: number;
-  resume?: File | null;
+  skills?: string[] | undefined;
+  graduation_year?: number | undefined;
+  resume?: File | null | undefined;
 }
 
 export interface Opportunity {
