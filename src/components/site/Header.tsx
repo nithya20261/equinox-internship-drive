@@ -76,7 +76,7 @@ export function Header() {
               <Link to="/login" className="btn btn-line h-9 px-4 text-sm font-semibold hover:text-[#7484FE]">
                 Login
               </Link>
-              <Link to="/register" className="btn btn-line h-9 px-4 text-sm font-semibold hover:text-[#7484FE]">
+              <Link to="/register" className="btn btn-signal h-9 px-4 text-sm font-semibold">
                 Register
               </Link>
             </>
@@ -134,7 +134,7 @@ export function Header() {
                   <Link to="/login" onClick={() => setOpen(false)} className="btn btn-line">
                     Login
                   </Link>
-                  <Link to="/register" onClick={() => setOpen(false)} className="btn btn-line">
+                  <Link to="/register" onClick={() => setOpen(false)} className="btn btn-signal">
                     Register
                   </Link>
                 </>
