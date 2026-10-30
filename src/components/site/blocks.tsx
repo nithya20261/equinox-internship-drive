@@ -213,9 +213,9 @@ export function OpportunityCard({
         {item?.requirement && (
           <div className="mt-3 rounded-xl border border-white/10 bg-[#151515] p-3 text-xs font-sans text-white/90">
             <span className="font-mono text-[10px] font-bold text-[#7484FE] uppercase tracking-wider block mb-1">
-              Requirement
+              Requirements
             </span>
-            <p className="leading-relaxed">{item.requirement}</p>
+            <p className="leading-relaxed whitespace-pre-line">{item.requirement}</p>
           </div>
         )}
 

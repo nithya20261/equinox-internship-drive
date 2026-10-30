@@ -514,7 +514,7 @@ BEGIN
     status = 'open',
     updated_at = now();
 
-  -- 9) Partner Organization: Requirement
+  -- 9) Partner Organization: Tech
   INSERT INTO public.internships (
     id,
     company_id,
@@ -538,16 +538,128 @@ BEGIN
     'd0000004-0000-0000-0000-000000000001',
     COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
     'Partner Organization',
-    'Tech, Marketing & Web Dev',
-    'General',
+    'Tech',
+    'Backend & Cloud Architecture',
     'MLRIT Campus / Hyderabad',
     NULL,
     NULL,
     NULL,
-    '10+ people from tech and marketing; 2 from web dev',
+    '- Basic knowledge of programming (Python, Java, C++ or similar)
+- Understanding of data structures and problem solving
+- Familiarity with Git and GitHub
+- Willingness to learn new tools and technologies
+- Good communication and teamwork',
     NULL,
-    ARRAY['Tech and marketing', 'Web development'],
-    ARRAY['Tech', 'Marketing', 'Web Dev'],
+    ARRAY['Programming and problem solving', 'Tools and technologies'],
+    ARRAY['Python', 'Java', 'C++', 'Git', 'Data Structures'],
+    'Open to all registered Equinox attendees',
+    'open',
+    now(),
+    now()
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    company_name = EXCLUDED.company_name,
+    role = EXCLUDED.role,
+    mode = EXCLUDED.mode,
+    duration = EXCLUDED.duration,
+    stipend = EXCLUDED.stipend,
+    requirement = EXCLUDED.requirement,
+    description = EXCLUDED.description,
+    status = 'open',
+    updated_at = now();
+
+  -- 10) Partner Organization: Web Dev
+  INSERT INTO public.internships (
+    id,
+    company_id,
+    company_name,
+    role,
+    domain,
+    location,
+    mode,
+    duration,
+    stipend,
+    requirement,
+    description,
+    responsibilities,
+    skills,
+    eligibility,
+    status,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    'd0000004-0000-0000-0000-000000000002',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
+    'Web Dev',
+    'Full-Stack Web Development',
+    'MLRIT Campus / Hyderabad',
+    NULL,
+    NULL,
+    NULL,
+    '- Working knowledge of HTML, CSS and JavaScript
+- Basic experience with a framework like React (preferred)
+- Ability to build simple responsive web pages
+- Familiarity with Git and GitHub
+- A portfolio or a couple of small projects is a plus',
+    NULL,
+    ARRAY['Web development', 'Responsive web pages'],
+    ARRAY['HTML', 'CSS', 'JavaScript', 'React', 'Git'],
+    'Open to all registered Equinox attendees',
+    'open',
+    now(),
+    now()
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    company_name = EXCLUDED.company_name,
+    role = EXCLUDED.role,
+    mode = EXCLUDED.mode,
+    duration = EXCLUDED.duration,
+    stipend = EXCLUDED.stipend,
+    requirement = EXCLUDED.requirement,
+    description = EXCLUDED.description,
+    status = 'open',
+    updated_at = now();
+
+  -- 11) Partner Organization: Marketing
+  INSERT INTO public.internships (
+    id,
+    company_id,
+    company_name,
+    role,
+    domain,
+    location,
+    mode,
+    duration,
+    stipend,
+    requirement,
+    description,
+    responsibilities,
+    skills,
+    eligibility,
+    status,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    'd0000004-0000-0000-0000-000000000003',
+    COALESCE((SELECT id FROM public.companies WHERE name ILIKE 'Partner Organization%' LIMIT 1), v_default_company_id),
+    'Partner Organization',
+    'Marketing',
+    'Digital Marketing, SEO & Growth Hacking',
+    'MLRIT Campus / Hyderabad',
+    NULL,
+    NULL,
+    NULL,
+    '- Good written and verbal communication
+- Basic understanding of social media platforms (Instagram, LinkedIn)
+- Creativity in content ideas, captions and posters
+- Familiarity with Canva or similar design tools
+- Ability to work in a team and meet deadlines',
+    NULL,
+    ARRAY['Social media operations', 'Content ideas and posters'],
+    ARRAY['Communication', 'Social Media', 'Canva', 'Creativity'],
     'Open to all registered Equinox attendees',
     'open',
     now(),

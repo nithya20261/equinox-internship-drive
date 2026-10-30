@@ -262,4 +262,46 @@ describe("Application Data Flow & Field Integrity", () => {
       expect(row[14]).toBe('"e4f8c8fe-94a3-45d0-b50d-8b6167f179d1/1793301182540-DOM.docx"');
     });
   });
+  // 9. Participating Companies & Opportunity Listings Verification
+  describe("Participating Opportunities Split & Anonymity", () => {
+    it("has 11 listings with Tech, Web Dev, and Marketing at the end", async () => {
+      const { INTERNSHIP_COMPANIES } = await import("../data/companies");
+      expect(INTERNSHIP_COMPANIES.length).toBe(11);
+
+      const roles = INTERNSHIP_COMPANIES.map((c) => c.role);
+      expect(roles.slice(-3)).toEqual(["Tech", "Web Dev", "Marketing"]);
+
+      const [tech, webDev, marketing] = INTERNSHIP_COMPANIES.slice(-3);
+
+      // Verify no Mode, Duration, or Stipend
+      expect(tech.mode).toBeUndefined();
+      expect(tech.duration).toBeUndefined();
+      expect(tech.stipend).toBeUndefined();
+
+      expect(webDev.mode).toBeUndefined();
+      expect(webDev.duration).toBeUndefined();
+      expect(webDev.stipend).toBeUndefined();
+
+      expect(marketing.mode).toBeUndefined();
+      expect(marketing.duration).toBeUndefined();
+      expect(marketing.stipend).toBeUndefined();
+
+      // Verify requirements are set and have no headcount numbers
+      expect(tech.requirement).toContain("Basic knowledge of programming");
+      expect(tech.requirement).not.toMatch(/10\+|\b2\b|openings/i);
+
+      expect(webDev.requirement).toContain("Working knowledge of HTML, CSS and JavaScript");
+      expect(webDev.requirement).not.toMatch(/10\+|\b2\b|openings/i);
+
+      expect(marketing.requirement).toContain("Good written and verbal communication");
+      expect(marketing.requirement).not.toMatch(/10\+|\b2\b|openings/i);
+
+      // Verify no company names anywhere
+      const allText = JSON.stringify(INTERNSHIP_COMPANIES).toLowerCase();
+      const forbidden = ["soaron", "aethriz", "vetria", "launchpadx", "student forge", "studentforge"];
+      for (const name of forbidden) {
+        expect(allText).not.toContain(name);
+      }
+    });
+  });
 });

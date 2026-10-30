@@ -111,10 +111,29 @@ export const INTERNSHIP_COMPANIES: InternshipListing[] = [
   },
   {
     id: "d0000004-0000-0000-0000-000000000001",
-    legacyId: "tech-marketing-web-dev",
+    legacyId: "tech",
     company: "Partner Organization (Confidential)",
-    role: "Tech, Marketing & Web Dev",
-    requirement: "10+ people from tech and marketing; 2 from web dev",
-    domain: "General",
+    role: "Tech",
+    requirement:
+      "- Basic knowledge of programming (Python, Java, C++ or similar)\n- Understanding of data structures and problem solving\n- Familiarity with Git and GitHub\n- Willingness to learn new tools and technologies\n- Good communication and teamwork",
+    domain: "Backend & Cloud Architecture",
+  },
+  {
+    id: "d0000004-0000-0000-0000-000000000002",
+    legacyId: "web-dev",
+    company: "Partner Organization (Confidential)",
+    role: "Web Dev",
+    requirement:
+      "- Working knowledge of HTML, CSS and JavaScript\n- Basic experience with a framework like React (preferred)\n- Ability to build simple responsive web pages\n- Familiarity with Git and GitHub\n- A portfolio or a couple of small projects is a plus",
+    domain: "Full-Stack Web Development",
+  },
+  {
+    id: "d0000004-0000-0000-0000-000000000003",
+    legacyId: "marketing",
+    company: "Partner Organization (Confidential)",
+    role: "Marketing",
+    requirement:
+      "- Good written and verbal communication\n- Basic understanding of social media platforms (Instagram, LinkedIn)\n- Creativity in content ideas, captions and posters\n- Familiarity with Canva or similar design tools\n- Ability to work in a team and meet deadlines",
+    domain: "Digital Marketing, SEO & Growth Hacking",
   },
 ];
