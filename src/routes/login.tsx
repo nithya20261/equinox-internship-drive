@@ -48,7 +48,15 @@ function Login() {
         window.location.href = "/dashboard/admin";
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Login failed. Please check your credentials.";
+      let msg = err instanceof Error ? err.message : "Login failed. Please check your credentials.";
+      if (
+        msg.includes("Unexpected end of JSON input") ||
+        msg.includes("JSON.parse") ||
+        msg.includes("Unexpected token") ||
+        msg.includes("Internal Server Error")
+      ) {
+        msg = "Authentication service temporarily unreachable. Please retry in a few moments.";
+      }
       setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
@@ -81,7 +89,7 @@ function Login() {
         {role === "student" ? (
           <>
             <div>
-              <FieldLabel htmlFor="l-cnf-number" hint="e.g. CNF-F6D524">Confirmation Number</FieldLabel>
+              <FieldLabel htmlFor="l-cnf-number" hint="CNF number, email, or team code">Confirmation Number / Email</FieldLabel>
               <input
                 id="l-cnf-number"
                 type="text"
@@ -91,14 +99,14 @@ function Login() {
                   setCnfNumber(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                className="field uppercase tracking-wider font-mono font-medium"
-                placeholder="CNF-XXXXXX"
+                className="field font-mono font-medium"
+                placeholder="CNF-XXXXXX or your registered email"
                 required
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="l-student-pass" hint="Same as your CNF number">Password</FieldLabel>
+              <FieldLabel htmlFor="l-student-pass" hint="Your CNF number or registered password">Password</FieldLabel>
               <input
                 id="l-student-pass"
                 type="password"
@@ -109,7 +117,7 @@ function Login() {
                   if (errorMessage) setErrorMessage(null);
                 }}
                 className="field font-mono"
-                placeholder="CNF-XXXXXX"
+                placeholder="Enter password"
                 required
               />
             </div>

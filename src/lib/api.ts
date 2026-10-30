@@ -156,40 +156,136 @@ export async function uploadResumeFile(userId: string, file: File): Promise<stri
 export async function registerStudentWithResume(input: StudentRegistrationInput) {
   const cleanEmail = input.email.trim().toLowerCase();
   const cleanTeamCode = input.team_code.trim().toUpperCase();
+  const cleanName = input.full_name.trim();
 
-  const result = await registerStudentServerFn({
-    data: {
+  let serverResult: any = null;
+  let serverError: string | null = null;
+
+  try {
+    serverResult = await registerStudentServerFn({
+      data: {
+        email: cleanEmail,
+        password: input.password,
+        fullName: cleanName,
+        college: input.college.trim(),
+        teamCode: cleanTeamCode,
+        mobile: input.mobile.trim(),
+        skills: input.skills ?? [],
+        graduationYear: input.graduation_year ?? null,
+      },
+    });
+
+    if (serverResult?.error) {
+      serverError = serverResult.error;
+    }
+  } catch (err: any) {
+    console.warn("registerStudentServerFn error, attempting direct client fallback:", err);
+  }
+
+  // If server function succeeded and returned a session/user
+  if (serverResult?.success && serverResult?.user) {
+    if (serverResult.session) {
+      await supabase.auth.setSession({
+        access_token: serverResult.session.access_token,
+        refresh_token: serverResult.session.refresh_token,
+      });
+    }
+
+    loginUser({
+      id: serverResult.user.id,
+      role: "student",
+      name: cleanName,
+      teamCode: cleanTeamCode,
+      email: cleanEmail,
+    });
+
+    return { confirmationRequired: false, user: serverResult.user };
+  }
+
+  // Direct client Supabase fallback
+  try {
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: cleanEmail,
       password: input.password,
-      fullName: input.full_name,
-      college: input.college,
-      teamCode: cleanTeamCode,
-      mobile: input.mobile,
-      skills: input.skills ?? [],
-      graduationYear: input.graduation_year ?? null,
-    },
-  });
-
-  if (result.session) {
-    // Restore authenticated session in client Supabase instance
-    await supabase.auth.setSession({
-      access_token: result.session.access_token,
-      refresh_token: result.session.refresh_token,
+      options: {
+        data: {
+          role: "student",
+          full_name: cleanName,
+          college: input.college.trim(),
+          team_code: cleanTeamCode,
+          mobile: input.mobile.trim(),
+        },
+      },
     });
+
+    let clientUser = signUpData?.user;
+    let clientSession = signUpData?.session;
+
+    if (
+      signUpError &&
+      (signUpError.message.toLowerCase().includes("already registered") ||
+       signUpError.message.toLowerCase().includes("already been registered") ||
+       signUpError.message.toLowerCase().includes("already exists"))
+    ) {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: input.password,
+      });
+
+      if (signInError) {
+        throw new Error(serverError || "An account with this email is already registered. Please sign in with your password on the login page.");
+      }
+
+      clientUser = signInData.user;
+      clientSession = signInData.session;
+    } else if (signUpError) {
+      throw new Error(serverError || signUpError.message || "Registration failed. Please try again.");
+    }
+
+    if (clientSession) {
+      await supabase.auth.setSession({
+        access_token: clientSession.access_token,
+        refresh_token: clientSession.refresh_token,
+      });
+    }
+
+    if (clientUser) {
+      await supabase.from("profiles").upsert({
+        id: clientUser.id,
+        role: "student",
+        email: cleanEmail,
+        full_name: cleanName,
+        college: input.college.trim(),
+      }).catch(() => {});
+
+      await supabase.from("students").upsert({
+        user_id: clientUser.id,
+        full_name: cleanName,
+        college: input.college.trim(),
+        team_code: cleanTeamCode,
+        mobile: input.mobile.trim(),
+      }).catch(() => {});
+
+      loginUser({
+        id: clientUser.id,
+        role: "student",
+        name: cleanName,
+        teamCode: cleanTeamCode,
+        email: cleanEmail,
+      });
+
+      return { confirmationRequired: false, user: clientUser };
+    }
+  } catch (clientErr: any) {
+    const errorMsg = clientErr?.message || serverError || "Registration failed. Please check your details and try again.";
+    throw new Error(errorMsg);
   }
 
-  const user = result.user;
-  if (user) {
-    loginUser({
-      id: user.id,
-      role: "student",
-      name: input.full_name.trim(),
-      teamCode: cleanTeamCode,
-      email: cleanEmail,
-    });
+  if (serverError) {
+    throw new Error(serverError);
   }
 
-  return { confirmationRequired: false, user };
+  throw new Error("Could not complete registration. Please try logging in or try again.");
 }
 
 /**
@@ -203,7 +299,8 @@ export async function loginStudent(credentials: {
   name?: string;
   password: string;
 }) {
-  const cnfNumber = (credentials.cnfNumber || credentials.teamCode || credentials.email || "").trim().toUpperCase();
+  const rawInput = (credentials.cnfNumber || credentials.teamCode || credentials.email || "").trim();
+  const cnfNumber = rawInput.toUpperCase();
   const fullName = (credentials.name || "").trim();
   const cleanPassword = credentials.password.trim();
 
@@ -236,26 +333,49 @@ export async function loginStudent(credentials: {
       loginUser({
         id: result.user.id,
         role: "student",
-        name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName || cnfNumber,
-        teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || cnfNumber,
+        name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName || rawInput,
+        teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || rawInput,
         email: result.user.email ?? undefined,
       });
 
       return result;
     }
   } catch (err: any) {
-    if (err?.message?.includes("Unauthorized Confirmation Number")) {
-      throw err;
-    }
     console.warn("loginStudentServerFn encountered error, attempting direct client fallback:", err);
   }
 
   // Direct client Supabase fallback
   const cleanCnf = cnfNumber.replace(/-/g, "").toLowerCase();
-  const emailsToTry = [
-    `${cleanCnf}@equinox.mlrit.ac.in`,
-    `${cnfNumber.toLowerCase()}@equinox.mlrit.ac.in`,
-  ];
+  const emailsToTry: string[] = [];
+
+  if (rawInput.includes("@")) {
+    emailsToTry.push(rawInput.toLowerCase());
+  }
+  emailsToTry.push(`${cleanCnf}@equinox.mlrit.ac.in`);
+  emailsToTry.push(`${cnfNumber.toLowerCase()}@equinox.mlrit.ac.in`);
+
+  // Also check if there is an existing student registered with this team code or cnf number
+  try {
+    const { data: st } = await supabase
+      .from("students")
+      .select("user_id, team_code")
+      .ilike("team_code", rawInput)
+      .maybeSingle();
+
+    if (st?.user_id) {
+      const { data: pr } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", st.user_id)
+        .maybeSingle();
+
+      if (pr?.email && !emailsToTry.includes(pr.email.toLowerCase())) {
+        emailsToTry.unshift(pr.email.toLowerCase());
+      }
+    }
+  } catch {
+    // Ignore lookup errors
+  }
 
   let authData: any = null;
   for (const email of emailsToTry) {
@@ -284,22 +404,17 @@ export async function loginStudent(credentials: {
     loginUser({
       id: authData.user.id,
       role: "student",
-      name: student?.full_name || (authData.user.user_metadata?.["full_name"] as string | undefined) || fullName || cnfNumber,
-      teamCode: student?.team_code || (authData.user.user_metadata?.["team_code"] as string | undefined) || cnfNumber,
+      name: student?.full_name || (authData.user.user_metadata?.["full_name"] as string | undefined) || fullName || rawInput,
+      teamCode: student?.team_code || (authData.user.user_metadata?.["team_code"] as string | undefined) || rawInput,
       email: authData.user.email ?? undefined,
     });
 
     return { session: authData.session, user: authData.user };
   }
 
-  throw new Error("Student authentication failed. Please check your Confirmation Number and Password.");
+  throw new Error("Student authentication failed. Please check your Confirmation Number / Email and Password.");
 }
 
-/**
- * Administrator login accepting strictly username EQUINOXCIE.
- * Authenticates against Supabase Auth via server function with rate limiting,
- * with direct client fallback for maximum resilience.
- */
 export async function loginAdmin(credentials: { username: string; password: string }) {
   const cleanUsername = credentials.username.trim().toUpperCase();
   if (cleanUsername !== "EQUINOXCIE") {

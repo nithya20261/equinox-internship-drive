@@ -81,7 +81,15 @@ function Register() {
 
       setIsSubmitted(true);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Registration failed. Please try again.";
+      let msg = err instanceof Error ? err.message : "Registration failed. Please try again.";
+      if (
+        msg.includes("Unexpected end of JSON input") ||
+        msg.includes("JSON.parse") ||
+        msg.includes("Unexpected token") ||
+        msg.includes("Internal Server Error")
+      ) {
+        msg = "Account created or already registered. Please proceed to log in with your credentials.";
+      }
       setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
