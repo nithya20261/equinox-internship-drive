@@ -275,6 +275,7 @@ export async function loginStudent(credentials: {
       (err.message.includes("Invalid") ||
        err.message.includes("not registered") ||
        err.message.includes("registration") ||
+       err.message.includes("Premium Pass") ||
        err.message.includes("administrator") ||
        err.message.includes("Too many") ||
        err.message.includes("wait"))
