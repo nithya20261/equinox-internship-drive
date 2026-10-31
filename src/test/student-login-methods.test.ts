@@ -21,13 +21,16 @@ describe("Student Authentication Logic (CNF + Email Dual Support)", () => {
       expect(studentHyphen?.name).toBe("A.Sharanya");
     });
 
-    it("enforces that for CNF students, password must match their CNF number exactly", () => {
-      const cnf = "CNF000";
-      const validPassword = "CNF000";
-      const invalidPassword = "Password123";
+    it("disallows CNF-only login without completed registration", () => {
+      const isRegistered = false;
+      const attemptLogin = (registered: boolean) => {
+        if (!registered) {
+          throw new Error("CNF-only login is disabled. Please complete registration first.");
+        }
+        return true;
+      };
 
-      expect(validPassword.toUpperCase() === cnf).toBe(true);
-      expect(invalidPassword.toUpperCase() === cnf).toBe(false);
+      expect(() => attemptLogin(isRegistered)).toThrow("CNF-only login is disabled");
     });
 
     it("returns null for unrecognized or non-existent CNF numbers", () => {

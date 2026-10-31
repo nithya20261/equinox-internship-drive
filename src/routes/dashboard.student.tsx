@@ -16,6 +16,7 @@ import {
   Download,
   FileText,
   Briefcase,
+  AlertCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/student")({
@@ -90,6 +91,33 @@ function StudentDashboard() {
             </Link>
             <Link to="/register" className="btn btn-line">
               Register
+            </Link>
+          </div>
+        </div>
+      </Container>
+    );
+  }
+
+  if (user?.role === "student" && user?.registrationCompleted === false) {
+    return (
+      <Container className="py-20">
+        <div className="mx-auto max-w-xl border border-amber-500/30 bg-[#0A0A0A] p-8 text-center rounded-2xl shadow-xl">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center border border-amber-500/50 bg-amber-500/10 text-amber-400 rounded-full">
+            <AlertCircle className="h-8 w-8" />
+          </div>
+          <h1 className="headline mt-6 text-2xl md:text-3xl text-white">Registration Incomplete</h1>
+          <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+            Your account has not completed the official Internship Drive candidate registration. To view your application status and apply for internships, please complete the registration form with your verified CNF and student details.
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+            <a
+              href={user?.teamCode ? `/register?cnf=${encodeURIComponent(user.teamCode)}` : "/register"}
+              className="btn btn-signal"
+            >
+              Complete Registration Now &rarr;
+            </a>
+            <Link to="/login" className="btn btn-line">
+              Switch Account
             </Link>
           </div>
         </div>

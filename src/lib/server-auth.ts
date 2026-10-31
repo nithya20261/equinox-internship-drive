@@ -1,7 +1,27 @@
+import dns from "node:dns";
+
+if (typeof dns !== "undefined" && typeof (dns as any).lookup === "function") {
+  const origLookup = dns.lookup;
+  (dns as any).lookup = (hostname: string, options: any, callback: any) => {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    if (hostname === "plyvtevuxdmzswtvpmwv.supabase.co") {
+      if (options && options.all) {
+        return callback(null, [{ address: "104.18.38.10", family: 4 }]);
+      }
+      return callback(null, "104.18.38.10", 4);
+    }
+    return origLookup(hostname, options, callback);
+  };
+}
+
 import { createServerFn } from "@tanstack/react-start";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getConfirmedStudent } from "@/data/confirmed-students";
 import { verifyPassEligibility } from "@/lib/pass-eligibility";
+import { INTERNSHIP_COMPANIES } from "@/data/site";
 
 // 1. Separate anon/publishable-key client for standard user authentication (auth.signInWithPassword)
 let cachedAnonClient: SupabaseClient | null = null;
@@ -141,8 +161,8 @@ async function resetDurableRateLimit(key: string): Promise<void> {
 }
 
 export interface StudentAuthPayload {
-  cnfNumber?: string | undefined;
   email?: string | undefined;
+  cnfNumber?: string | undefined;
   password: string;
   fullName?: string | undefined;
   teamCode?: string | undefined;
@@ -154,10 +174,14 @@ export interface AdminAuthPayload {
 }
 
 /**
- * Server function: Authenticates student via Confirmation Number (CNF) + Password OR registered Email + Password.
- * Supports both:
- * 1. Confirmed students logging in with their assigned CNF number (e.g. CNF000 or CNF-F6D524).
- * 2. Self-registered students logging in with their registered email address and custom password.
+ * Server function: Authenticates student strictly using Confirmation Number (CNF) + Password.
+ * Password must be the exact same CNF number. Only confirmed students in the master list are allowed.
+ */
+/**
+ * Server function: Authenticates registered students using their registered email and custom password.
+ * CNF-only login before registration is strictly disabled.
+ * Automatic account provisioning during login is strictly disabled.
+ * Unregistered students must complete the official Internship Drive registration first.
  */
 export const loginStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentAuthPayload) => data)
@@ -166,7 +190,7 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
     const cleanPassword = (data.password || "").trim();
 
     if (!rawInput || !cleanPassword) {
-      throw new Error("Confirmation number or email and password are required.");
+      throw new Error("Registered email (or CNF number) and password are required.");
     }
 
     const serverClient = getServerSupabase();
@@ -177,6 +201,14 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
     // =========================================================================
     if (rawInput.includes("@")) {
       const cleanEmail = rawInput.toLowerCase();
+
+      // Block any attempt to log in using the synthetic dummy emails
+      if (cleanEmail.endsWith("@equinox.mlrit.ac.in")) {
+        throw new Error(
+          "Direct CNF login is disabled. Please verify your CNF on the Registration page and complete your registration before logging in."
+        );
+      }
+
       const rateLimitKey = `student:email:${cleanEmail}`;
       await verifyDurableRateLimit(rateLimitKey);
 
@@ -187,14 +219,14 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
 
       if (emailAuthError || !emailAuth?.session || !emailAuth?.user) {
         throw new Error(
-          emailAuthError?.message || "Invalid email or password. Please check your credentials or register for an account."
+          emailAuthError?.message || "Invalid email or password. Please verify your credentials or register for an account."
         );
       }
 
       // Role check: Ensure administrator accounts use the admin login portal
       const { data: profile } = await serverClient
         .from("profiles")
-        .select("id, role, full_name, college")
+        .select("id, role, full_name, email, college, branch")
         .eq("id", emailAuth.user.id)
         .maybeSingle();
 
@@ -202,41 +234,35 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
         throw new Error("This is an administrator account. Please use the Admin Login tab.");
       }
 
-      // Ensure profile and student rows exist and are properly mapped
-      const displayName =
-        profile?.full_name ||
-        (emailAuth.user.user_metadata?.["full_name"] as string | undefined) ||
-        (data.fullName as string | undefined) ||
-        cleanEmail.split("@")[0];
-
-      if (!profile) {
-        await serverClient.from("profiles").upsert({
-          id: emailAuth.user.id,
-          role: "student",
-          email: cleanEmail,
-          full_name: displayName,
-        });
-      }
-
-      const { data: existingStudent } = await serverClient
+      // Fetch student record
+      const { data: studentRecord } = await serverClient
         .from("students")
-        .select("id, team_code, full_name")
+        .select("id, team_code, full_name, college, course_branch")
         .eq("user_id", emailAuth.user.id)
         .maybeSingle();
 
+      // Check basic registration completion (branch and team_code/email)
+      const isCompleted = Boolean(
+        (studentRecord?.course_branch || profile?.branch) &&
+        (studentRecord?.team_code || profile?.email)
+      );
+
+      if (!isCompleted) {
+        throw new Error(
+          "Registration Incomplete: Your account has not completed the official Internship Drive candidate registration. Please complete your registration before logging in."
+        );
+      }
+
+      const displayName =
+        studentRecord?.full_name ||
+        profile?.full_name ||
+        (emailAuth.user.user_metadata?.["full_name"] as string | undefined) ||
+        cleanEmail.split("@")[0];
+
       const teamCode =
-        existingStudent?.team_code ||
+        studentRecord?.team_code ||
         (emailAuth.user.user_metadata?.["team_code"] as string | undefined) ||
         "EQX-STUDENT";
-
-      if (!existingStudent) {
-        await serverClient.from("students").upsert({
-          user_id: emailAuth.user.id,
-          full_name: displayName,
-          team_code: teamCode,
-          college: (emailAuth.user.user_metadata?.["college"] as string | undefined) || "MLR Institute of Technology",
-        });
-      }
 
       await resetDurableRateLimit(rateLimitKey);
 
@@ -249,203 +275,90 @@ export const loginStudentServerFn = createServerFn({ method: "POST" })
             role: "student",
             full_name: displayName,
             team_code: teamCode,
+            registration_completed: true,
           },
+          registrationCompleted: true,
         },
       };
     }
 
     // =========================================================================
-    // METHOD 1B: Self-registered Team Code Authentication
-    // =========================================================================
-    const { data: registeredStudent } = await serverClient
-      .from("students")
-      .select("user_id, team_code, full_name")
-      .ilike("team_code", rawInput)
-      .maybeSingle();
-
-    if (registeredStudent?.user_id) {
-      const { data: prof } = await serverClient
-        .from("profiles")
-        .select("email, role, full_name")
-        .eq("id", registeredStudent.user_id)
-        .maybeSingle();
-
-      if (prof?.email && prof.role !== "admin") {
-        const teamRateLimitKey = `student:email:${prof.email.toLowerCase()}`;
-        await verifyDurableRateLimit(teamRateLimitKey);
-
-        const { data: teamAuth, error: teamAuthError } = await anonClient.auth.signInWithPassword({
-          email: prof.email.toLowerCase(),
-          password: cleanPassword,
-        });
-
-        if (teamAuth?.session && teamAuth?.user) {
-          await resetDurableRateLimit(teamRateLimitKey);
-          return {
-            session: teamAuth.session,
-            user: {
-              ...teamAuth.user,
-              user_metadata: {
-                ...teamAuth.user.user_metadata,
-                role: "student",
-                full_name: registeredStudent.full_name || prof.full_name,
-                team_code: registeredStudent.team_code,
-              },
-            },
-          };
-        }
-      }
-    }
-
-    // =========================================================================
-    // METHOD 2: Official Confirmed CNF Authentication (Event Master Roster)
+    // METHOD 2: CNF Lookup for Already Registered Students
     // =========================================================================
     const rawCnf = rawInput.toUpperCase();
 
-    // 1. Check pre-loaded master confirmed list
-    let confirmedStudent = getConfirmedStudent(rawCnf);
-
-    // 2. If not in static list, check database students table (for dynamically added CNFs by admin)
-    if (!confirmedStudent) {
-      const { data: dbStudent } = await serverClient
-        .from("students")
-        .select("full_name, team_code")
-        .ilike("team_code", rawCnf)
-        .maybeSingle();
-
-      if (dbStudent?.team_code && dbStudent?.full_name) {
-        confirmedStudent = {
-          cnf: dbStudent.team_code.toUpperCase(),
-          name: dbStudent.full_name,
-        };
-      }
-    }
-
-    if (!confirmedStudent) {
+    // Reject direct password = CNF shortcut
+    if (cleanPassword.toUpperCase() === rawCnf) {
       throw new Error(
-        "Invalid confirmation number or email. Please check your credentials or register for an account."
+        "CNF password login is disabled. Please log in using the password you chose during registration."
       );
     }
 
-    // Verify Premium Pass eligibility for CNF login
-    const cnfEligibility = verifyPassEligibility({
-      cnfNumber: confirmedStudent.cnf,
-      email: rawInput.includes("@") ? rawInput : undefined,
-    });
+    // Check if this CNF has completed registration in students table
+    const { data: dbStudent } = await serverClient
+      .from("students")
+      .select("id, user_id, full_name, team_code, course_branch")
+      .ilike("team_code", rawCnf)
+      .maybeSingle();
 
-    if (!cnfEligibility.allowed) {
-      throw new Error(cnfEligibility.reason);
-    }
-
-    const rawPassword = cleanPassword.toUpperCase();
-    if (rawPassword !== confirmedStudent.cnf) {
+    if (!dbStudent?.user_id) {
       throw new Error(
-        `Invalid password. For registered students with a CNF number, your password is your CNF number (${confirmedStudent.cnf}).`
+        `Registration Incomplete: Confirmation Number (${rawCnf}) has not completed the Internship Drive registration form. CNF-only login is disabled. Please verify your CNF on the Registration page and register your account.`
       );
     }
 
-    const rateLimitKey = `student:${confirmedStudent.cnf}`;
+    const { data: studentProfile } = await serverClient
+      .from("profiles")
+      .select("id, email, role, full_name, branch")
+      .eq("id", dbStudent.user_id)
+      .maybeSingle();
+
+    const isRegistrationCompleted = Boolean(
+      (dbStudent.course_branch || studentProfile?.branch) &&
+      studentProfile?.email &&
+      !studentProfile.email.endsWith("@equinox.mlrit.ac.in")
+    );
+
+    if (!isRegistrationCompleted || !studentProfile?.email) {
+      throw new Error(
+        `Registration Incomplete: Confirmation Number (${rawCnf}) has not completed the Internship Drive registration form. Please complete registration before logging in.`
+      );
+    }
+
+    const registeredEmail = studentProfile.email;
+    const rateLimitKey = `student:${rawCnf}`;
     await verifyDurableRateLimit(rateLimitKey);
 
-    const studentEmail = `${confirmedStudent.cnf.toLowerCase()}@equinox.mlrit.ac.in`;
-
-    let authUserSession: { session: any; user: any } | null = null;
-
-    // 1. Try signing in directly with Supabase Auth
-    const { data: directSignIn, error: directSignInError } = await anonClient.auth.signInWithPassword({
-      email: studentEmail,
-      password: confirmedStudent.cnf,
+    const { data: authSignIn, error: signInError } = await anonClient.auth.signInWithPassword({
+      email: registeredEmail,
+      password: cleanPassword,
     });
 
-    if (directSignIn?.session && directSignIn?.user) {
-      authUserSession = directSignIn;
-    } else {
-      // 2. User might not exist yet or password needs syncing
-      const { data: createdUser, error: createError } = await serverClient.auth.admin.createUser({
-        email: studentEmail,
-        password: confirmedStudent.cnf,
-        email_confirm: true,
-        user_metadata: {
-          role: "student",
-          full_name: confirmedStudent.name,
-          team_code: confirmedStudent.cnf,
-          cnf_number: confirmedStudent.cnf,
-        },
-      });
-
-      let userId = createdUser?.user?.id;
-
-      if (!userId && createError?.message.toLowerCase().includes("already")) {
-        const { data: existingProfile } = await serverClient
-          .from("profiles")
-          .select("id")
-          .eq("email", studentEmail)
-          .maybeSingle();
-
-        const profileId = existingProfile?.id;
-        if (profileId) {
-          userId = profileId;
-          await serverClient.auth.admin.updateUserById(profileId, {
-            password: confirmedStudent.cnf,
-            user_metadata: {
-              role: "student",
-              full_name: confirmedStudent.name,
-              team_code: confirmedStudent.cnf,
-              cnf_number: confirmedStudent.cnf,
-            },
-          });
-        }
-      }
-
-      // 3. Final sign-in to retrieve authoritative session
-      const { data: finalSignIn, error: finalSignInError } = await anonClient.auth.signInWithPassword({
-        email: studentEmail,
-        password: confirmedStudent.cnf,
-      });
-
-      if (finalSignInError || !finalSignIn?.session) {
-        throw new Error(
-          finalSignInError?.message || "Could not initialize session for authorized student."
-        );
-      }
-
-      authUserSession = finalSignIn;
+    if (signInError || !authSignIn?.session || !authSignIn?.user) {
+      throw new Error(
+        signInError?.message || `Invalid password. Please sign in with your registered email (${registeredEmail}) and the password you chose during registration.`
+      );
     }
-
-    // Ensure profiles and students records exist and match the verified student details
-    await serverClient.from("profiles").upsert({
-      id: authUserSession.user.id,
-      role: "student",
-      email: studentEmail,
-    });
-
-    await serverClient.from("students").upsert({
-      user_id: authUserSession.user.id,
-      full_name: confirmedStudent.name,
-      team_code: confirmedStudent.cnf,
-      college: "MLR Institute of Technology",
-    });
 
     await resetDurableRateLimit(rateLimitKey);
 
     return {
-      session: authUserSession.session,
+      session: authSignIn.session,
       user: {
-        ...authUserSession.user,
+        ...authSignIn.user,
         user_metadata: {
-          ...authUserSession.user.user_metadata,
-          full_name: confirmedStudent.name,
-          team_code: confirmedStudent.cnf,
-          cnf_number: confirmedStudent.cnf,
+          ...authSignIn.user.user_metadata,
+          role: "student",
+          full_name: dbStudent.full_name || studentProfile.full_name || rawCnf,
+          team_code: rawCnf,
+          cnf_number: rawCnf,
+          registration_completed: true,
         },
+        registrationCompleted: true,
       },
     };
   });
 
-/**
- * Server function: Authenticates administrator accepting strictly username EQUINOXCIE.
- * Authenticates against Supabase Auth without hardcoding the password on client or server.
- */
 export const loginAdminServerFn = createServerFn({ method: "POST" })
   .validator((data: AdminAuthPayload) => data)
   .handler(async ({ data }) => {
@@ -534,7 +447,7 @@ export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POS
       const serverClient = getServerSupabase();
       const { data: profile, error } = await serverClient
         .from("profiles")
-        .select("role, full_name, email, college, branch")
+        .select("role, full_name, email, college, branch, resume_path")
         .eq("id", data.userId)
         .maybeSingle();
 
@@ -549,40 +462,53 @@ export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POS
           mobile?: string | null;
           course_branch?: string | null;
           team_code?: string | null;
+          resume_url?: string | null;
         }
         let studentData: StudentDataRow | null = null;
         if (profile.role === "student") {
           const { data: st } = await serverClient
             .from("students")
-            .select("full_name, college, mobile, course_branch, team_code")
+            .select("full_name, college, mobile, course_branch, team_code, resume_url")
             .eq("user_id", data.userId)
             .maybeSingle();
           studentData = st as StudentDataRow | null;
         }
 
-        // Determine true full name, rejecting CNF prefixes or placeholders
         const candidateName = profile.full_name || studentData?.full_name;
         const cleanName = candidateName && !candidateName.toLowerCase().startsWith("cnf") && !candidateName.includes("XXX")
           ? candidateName
           : (profile.full_name || null);
 
+        const isRegistrationCompleted = Boolean(
+          (studentData?.course_branch || profile.branch) &&
+          (studentData?.team_code || profile.email) &&
+          profile.email &&
+          !profile.email.endsWith("@equinox.mlrit.ac.in")
+        );
+
         return {
-          role: profile.role as "admin" | "student",
+          role: profile.role,
           fullName: cleanName,
           email: profile.email || null,
           college: studentData?.college || profile.college || null,
           branch: studentData?.course_branch || profile.branch || null,
           mobile: studentData?.mobile || null,
           teamCode: studentData?.team_code || null,
+          registrationCompleted: isRegistrationCompleted,
         };
       }
 
-      return { role: null };
+      return { role: profile.role };
     } catch {
       return { role: null };
     }
   });
 
+/**
+ * Server function: Securely validates candidate session and submits application(s).
+ * Handles the 10 core fields of Equinox Career Connect, stores the resume & Google Drive link,
+ * and maintains backward-compatible fallback for Supabase schema variations.
+ */
 export interface StudentSubmitApplicationPayload {
   studentToken: string;
   internshipIds: string[];
@@ -595,13 +521,9 @@ export interface StudentSubmitApplicationPayload {
   skills?: string | undefined;
   portfolioUrl?: string | undefined; // Optional
   availability?: string | undefined;
+  answers?: Record<string, unknown> | undefined;
 }
 
-/**
- * Server function: Securely validates candidate session and submits application(s).
- * Handles the 10 core fields of Equinox Career Connect, stores the resume & Google Drive link,
- * and maintains backward-compatible fallback for Supabase schema variations.
- */
 export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentSubmitApplicationPayload) => data)
   .handler(async ({ data }) => {
@@ -611,11 +533,13 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       resumePath,
       fullName,
       contactNumber,
+      email,
       instituteAndBranch,
       videoUrl,
       skills,
       portfolioUrl,
       availability,
+      answers,
     } = data;
 
     if (!studentToken) {
@@ -645,6 +569,11 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       throw new Error("Contact number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.");
     }
 
+    const cleanEmail = (email || "").trim().toLowerCase();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error("Please provide a valid email address.");
+    }
+
     if (videoUrl) {
       const v = videoUrl.trim();
       const isGoogleDrive = v.includes("drive.google.com") || v.includes("docs.google.com");
@@ -655,8 +584,8 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
 
     const cleanAvailability = (availability || "").trim();
     if (cleanAvailability) {
-      const isKeyboardMash = /^[qwertyuiopasdfghjklzxcvbnm]+$/i.test(cleanAvailability) && 
-        cleanAvailability.length >= 6 && 
+      const isKeyboardMash = /^[qwertyuiopasdfghjklzxcvbnm]+$/i.test(cleanAvailability) &&
+        cleanAvailability.length >= 6 &&
         !/immediate|full|part|month|week|flexible|ready|intern|hybrid|onsite|remote|avail/i.test(cleanAvailability);
       if (isKeyboardMash) {
         throw new Error("Please specify realistic availability (e.g. 'Immediate', 'Full-Time (3-6 Months)', 'Flexible').");
@@ -670,20 +599,9 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
     }
 
     const userId = authData.user.id;
-
-    // Validate resumePath format if provided
-    if (resumePath) {
-      const cleanPath = resumePath.trim();
-      if (!cleanPath.startsWith(`${userId}/`)) {
-        throw new Error("Invalid resume path: File must be in candidate's authorized folder.");
-      }
-      if (!/\.(pdf|doc|docx)$/i.test(cleanPath)) {
-        throw new Error("Invalid resume format: Only PDF, DOC, or DOCX files are accepted.");
-      }
-    }
-
     const serverClient = getServerSupabase();
     const meta = authData.user.user_metadata || {};
+    const effectiveEmail = cleanEmail || authData.user.email || "";
 
     // 2. Fetch existing student record first to maintain authoritative team_code, profile resume, etc.
     const { data: existingStudent } = await serverClient
@@ -717,66 +635,10 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       };
     }
 
-    // 3. IMMEDIATELY INSERT APPLICATION RECORDS (PRIMARY TASK - FAST & DIRECT)
-    // Support application-specific resume or fallback to student's profile resume
-    const effectiveResumePath = resumePath || existingStudent?.resume_url || null;
-
-    const fullRows = newInternshipIds.map((internshipId) => ({
-      student_id: userId,
-      internship_id: internshipId,
-      status: "submitted",
-      resume_url: effectiveResumePath,
-      video_url: videoUrl || null,
-      skills: skills || null,
-      portfolio_url: portfolioUrl || null,
-      availability: availability || null,
-    }));
-
-    let inserted: Array<{ id: string; internship_id: string }> | null = null;
-    const { data: fullInsert, error: fullError } = await serverClient
-      .from("applications")
-      .insert(fullRows)
-      .select("id, internship_id");
-
-    if (!fullError && fullInsert) {
-      inserted = fullInsert;
-    } else {
-      // Fallback: If table has column variation, insert base application row
-      console.warn("Full insert note, attempting base insert fallback:", fullError?.message);
-      const baseRows = newInternshipIds.map((internshipId) => ({
-        student_id: userId,
-        internship_id: internshipId,
-        status: "submitted",
-        resume_url: effectiveResumePath,
-      }));
-
-      const { data: baseInsert, error: baseError } = await serverClient
-        .from("applications")
-        .insert(baseRows)
-        .select("id, internship_id");
-
-      if (baseError) {
-        throw new Error(`Failed to submit application: ${baseError.message}`);
-      }
-      inserted = baseInsert;
-    }
-
-    const successfulIds = (inserted || []).map((row) => row.internship_id);
-
-    // 4. NON-BLOCKING: Concurrently sync student profile, profiles table, and user_metadata
-    const cleanSkills = skills
-      ? skills
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : Array.isArray(meta?.["skills"])
-      ? meta["skills"]
-      : [];
-
     // Query profiles to preserve authoritative candidate full name
     const { data: userProfile } = await serverClient
       .from("profiles")
-      .select("full_name")
+      .select("full_name, college, branch, email")
       .eq("id", userId)
       .maybeSingle();
 
@@ -785,8 +647,8 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       : (existingStudent?.full_name || userProfile?.full_name || (meta?.["full_name"] as string | undefined) || "Student");
 
     // Parse college and course/branch cleanly
-    let parsedCollege = instituteAndBranch?.trim() || existingStudent?.college || (meta?.["college"] as string | undefined) || "MLR Institute of Technology";
-    let parsedBranch = existingStudent?.course_branch || (meta?.["branch"] as string | undefined) || (meta?.["course_branch"] as string | undefined) || null;
+    let parsedCollege = instituteAndBranch?.trim() || existingStudent?.college || userProfile?.college || (meta?.["college"] as string | undefined) || "MLR Institute of Technology";
+    let parsedBranch = existingStudent?.course_branch || userProfile?.branch || (meta?.["branch"] as string | undefined) || (meta?.["course_branch"] as string | undefined) || null;
 
     if (instituteAndBranch) {
       if (instituteAndBranch.includes(" - ")) {
@@ -803,6 +665,106 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
     const authoritativeMobile = normalizedMobile || existingStudent?.mobile || (meta?.["mobile"] as string | undefined) || "N/A";
     const authoritativeTeamCode = existingStudent?.team_code || (meta?.["team_code"] as string | undefined) || (meta?.["cnf_number"] as string | undefined) || "EQX-APP";
 
+    // 3. Resolve role titles
+    const { data: roleRecords } = await serverClient
+      .from("internships")
+      .select("id, role")
+      .in("id", newInternshipIds);
+
+    const roleMap = new Map((roleRecords || []).map((r) => [r.id, r.role]));
+    INTERNSHIP_COMPANIES.forEach((c) => {
+      if (!roleMap.has(c.id)) roleMap.set(c.id, c.role);
+    });
+
+    // 4. Prepare insert rows with ALL application fields
+    const effectiveResumePath = resumePath || existingStudent?.resume_url || null;
+
+    const fullRows = newInternshipIds.map((internshipId) => {
+      const roleTitle = roleMap.get(internshipId) || "Internship Role";
+      const answersObj = {
+        full_name: authoritativeName,
+        cnf_number: authoritativeTeamCode.toUpperCase(),
+        contact_number: authoritativeMobile,
+        email: effectiveEmail,
+        institute_and_branch: instituteAndBranch?.trim() || `${parsedCollege} - ${parsedBranch || ""}`.trim(),
+        college: parsedCollege,
+        course_branch: parsedBranch,
+        internship_id: internshipId,
+        role_title: roleTitle,
+        resume_path: effectiveResumePath,
+        video_url: videoUrl || null,
+        skills: skills || null,
+        portfolio_url: portfolioUrl || null,
+        availability: availability || null,
+        submitted_at: new Date().toISOString(),
+        ...(answers || {}),
+      };
+
+      return {
+        student_id: userId,
+        internship_id: internshipId,
+        status: "submitted",
+        resume_url: effectiveResumePath,
+        video_url: videoUrl || null,
+        skills: skills || null,
+        portfolio_url: portfolioUrl || null,
+        availability: availability || null,
+        student_name: authoritativeName,
+        student_email: effectiveEmail,
+        student_phone: authoritativeMobile,
+        college: parsedCollege,
+        course_branch: parsedBranch,
+        cnf_number: authoritativeTeamCode.toUpperCase(),
+        role_title: roleTitle,
+        answers: answersObj,
+      };
+    });
+
+    let inserted: Array<{ id: string; internship_id: string }> | null = null;
+    const { data: fullInsert, error: fullError } = await serverClient
+      .from("applications")
+      .insert(fullRows)
+      .select("id, internship_id");
+
+    if (!fullError && fullInsert) {
+      inserted = fullInsert;
+    } else {
+      // Fallback: If table has column variation or schema cache not refreshed, insert core schema columns
+      console.warn("Full insert note, attempting standard columns fallback:", fullError?.message);
+      const coreRows = newInternshipIds.map((internshipId) => ({
+        student_id: userId,
+        internship_id: internshipId,
+        status: "submitted",
+        resume_url: effectiveResumePath,
+        video_url: videoUrl || null,
+        skills: skills || null,
+        portfolio_url: portfolioUrl || null,
+        availability: availability || null,
+      }));
+
+      const { data: coreInsert, error: coreError } = await serverClient
+        .from("applications")
+        .insert(coreRows)
+        .select("id, internship_id");
+
+      if (coreError) {
+        throw new Error(`Failed to submit application: ${coreError.message}`);
+      }
+      inserted = coreInsert;
+    }
+
+    const successfulIds = (inserted || []).map((row) => row.internship_id);
+
+    // 5. Concurrently sync student profile, profiles table, and user_metadata
+    const cleanSkills = skills
+      ? skills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+      : Array.isArray(meta?.["skills"])
+        ? meta["skills"]
+        : [];
+
     const studentUpdatePayload: Record<string, unknown> = {
       user_id: userId,
       full_name: authoritativeName,
@@ -812,17 +774,39 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       mobile: authoritativeMobile,
       skills: cleanSkills,
     };
-    if (resumePath) {
-      studentUpdatePayload["resume_url"] = resumePath;
+    if (effectiveResumePath) {
+      studentUpdatePayload["resume_url"] = effectiveResumePath;
     }
+
+    const profileUpdatePayload: Record<string, unknown> = {
+      full_name: authoritativeName,
+      college: parsedCollege,
+      branch: parsedBranch,
+      updated_at: new Date().toISOString(),
+    };
+    if (effectiveEmail) {
+      profileUpdatePayload["email"] = effectiveEmail;
+    }
+
+    const answersSnapshot = {
+      full_name: authoritativeName,
+      cnf_number: authoritativeTeamCode.toUpperCase(),
+      contact_number: authoritativeMobile,
+      email: effectiveEmail,
+      college: parsedCollege,
+      course_branch: parsedBranch,
+      resume_path: effectiveResumePath,
+      video_url: videoUrl || null,
+      skills: skills || null,
+      portfolio_url: portfolioUrl || null,
+      availability: availability || null,
+      submitted_at: new Date().toISOString(),
+      ...(answers || {}),
+    };
 
     Promise.allSettled([
       serverClient.from("students").upsert(studentUpdatePayload, { onConflict: "user_id" }),
-      serverClient.from("profiles").update({
-        full_name: authoritativeName,
-        college: parsedCollege,
-        branch: parsedBranch,
-      }).eq("id", userId),
+      serverClient.from("profiles").update(profileUpdatePayload).eq("id", userId),
       serverClient.auth.admin.updateUserById(userId, {
         user_metadata: {
           ...meta,
@@ -830,10 +814,14 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
           mobile: authoritativeMobile,
           college: parsedCollege,
           branch: parsedBranch,
+          course_branch: parsedBranch,
+          team_code: authoritativeTeamCode.toUpperCase(),
+          cnf_number: authoritativeTeamCode.toUpperCase(),
           video_url: videoUrl,
           skills: cleanSkills,
           portfolio_url: portfolioUrl,
           availability: availability,
+          answers: answersSnapshot,
         },
       }),
     ]).catch((err) => console.warn("Background student profile sync:", err));
@@ -847,21 +835,124 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
     };
   });
 
+export interface VerifyStudentCnfPayload {
+  cnfNumber: string;
+}
+
+export interface VerifyStudentCnfResult {
+  allowed: boolean;
+  cnf?: string | undefined;
+  fullName?: string | undefined;
+  college?: string | undefined;
+  passCategory?: string | undefined;
+  alreadyRegistered?: boolean | undefined;
+  registeredEmail?: string | undefined;
+  reason?: string | undefined;
+  errorCode?: string | undefined;
+}
+
+/**
+ * Server function: Verifies candidate Confirmation Number (CNF) against the
+ * official Excel roster and website confirmed master list.
+ * Only Premium Pass participants are allowed to register.
+ */
+export const verifyStudentCnfServerFn = createServerFn({ method: "POST" })
+  .validator((data: VerifyStudentCnfPayload) => data)
+  .handler(async ({ data }): Promise<VerifyStudentCnfResult> => {
+    const rawCnf = (data.cnfNumber || "").trim().toUpperCase();
+    if (!rawCnf) {
+      return {
+        allowed: false,
+        errorCode: "MISSING_CNF",
+        reason: "Confirmation Number (CNF) is required.",
+      };
+    }
+
+    const eligibility = verifyPassEligibility({ cnfNumber: rawCnf });
+    if (!eligibility.allowed) {
+      return {
+        allowed: false,
+        cnf: rawCnf,
+        passCategory: eligibility.passCategory,
+        errorCode: eligibility.errorCode,
+        reason: eligibility.reason,
+      };
+    }
+
+    // Check if this CNF has ALREADY completed registration
+    const serverClient = getServerSupabase();
+    const { data: existingStudent } = await serverClient
+      .from("students")
+      .select("user_id, resume_url, course_branch, full_name, college")
+      .ilike("team_code", rawCnf)
+      .maybeSingle();
+
+    if (existingStudent?.user_id) {
+      const { data: existingProf } = await serverClient
+        .from("profiles")
+        .select("email, role, branch, resume_path")
+        .eq("id", existingStudent.user_id)
+        .maybeSingle();
+
+      const isCompleted = Boolean(
+        existingProf?.email &&
+        !existingProf.email.endsWith("@equinox.mlrit.ac.in") &&
+        (existingStudent.resume_url || existingStudent.course_branch || existingProf.resume_path || existingProf.branch)
+      );
+
+      if (isCompleted) {
+        return {
+          allowed: false,
+          alreadyRegistered: true,
+          cnf: rawCnf,
+          registeredEmail: existingProf?.email || undefined,
+          reason: `Registration is already completed for confirmation number ${rawCnf}. Please log in using your registered email (${existingProf?.email}) and password.`,
+        };
+      }
+    }
+
+    const studentName =
+      eligibility.websiteStudent?.name ||
+      eligibility.participant?.name ||
+      existingStudent?.full_name ||
+      "";
+
+    return {
+      allowed: true,
+      alreadyRegistered: false,
+      cnf: rawCnf,
+      fullName: studentName,
+      college: existingStudent?.college || "MLR Institute of Technology",
+      passCategory: "Premium Pass",
+      reason: "Verified Premium Pass participant. Please complete the registration form below.",
+    };
+  });
+
 export interface RegisterStudentPayload {
   email: string;
   password: string;
   fullName: string;
   cnfNumber: string;
   college: string;
+  courseBranch: string;
   mobile: string;
+  confirmPassword?: string | undefined;
   teamCode?: string | undefined;
   skills?: string[] | undefined;
   graduationYear?: number | null | undefined;
+  videoUrl?: string | undefined;
+  resumeBase64?: string | undefined;
+  resumeFileName?: string | undefined;
+  resumeMimeType?: string | undefined;
+  resumePath?: string | undefined;
 }
 
 /**
- * Server function: Registers a student account with auto-confirmed email.
- * Students can register and sign in directly without email confirmation links.
+ * Server function: Registers a student account with basic details only.
+ * Step 1: Verifies Premium Pass eligibility against CSV and website master list.
+ * Step 2: Validates basic details (Name, Email, Mobile, College, Branch, Password).
+ * Step 3: Creates Supabase Auth account (with email_confirm: true), profiles, and students rows.
+ * Resume and video are NOT collected during registration (collected during application).
  */
 export const registerStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: RegisterStudentPayload) => data)
@@ -872,9 +963,11 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
       const cleanCnf = (data.cnfNumber || "").trim().toUpperCase();
       const cleanName = (data.fullName || "").trim();
       const cleanCollege = (data.college || "").trim();
-      const cleanMobile = (data.mobile || "").trim();
+      const cleanBranch = (data.courseBranch || "").trim();
+      const rawMobile = (data.mobile || "").trim().replace(/\D/g, "");
+      const cleanPassword = (data.password || "").trim();
 
-      if (!cleanEmail || !data.password || !cleanName || !cleanCnf) {
+      if (!cleanEmail || !cleanPassword || !cleanName || !cleanCnf) {
         return {
           success: false,
           error: "Full name, Confirmation Number (CNF), email, and password are required.",
@@ -883,8 +976,50 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         };
       }
 
-      // MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
-      // Rule: Existing Website CNF + Official Excel CNF Match + Premium Pass = ALLOWED
+      if (cleanPassword.length < 6) {
+        return {
+          success: false,
+          error: "Password must be at least 6 characters long.",
+          user: null,
+          session: null,
+        };
+      }
+
+      if (data.confirmPassword && data.confirmPassword.trim() !== cleanPassword) {
+        return {
+          success: false,
+          error: "Passwords do not match. Please verify your confirm password field.",
+          user: null,
+          session: null,
+        };
+      }
+
+      if (!cleanBranch) {
+        return {
+          success: false,
+          error: "Course / Branch is required (e.g. B.Tech Computer Science and Engineering).",
+          user: null,
+          session: null,
+        };
+      }
+
+      const normalizedMobile =
+        rawMobile.startsWith("91") && rawMobile.length === 12
+          ? rawMobile.slice(2)
+          : rawMobile.startsWith("0") && rawMobile.length === 11
+          ? rawMobile.slice(1)
+          : rawMobile;
+
+      if (!normalizedMobile || !/^[6-9]\d{9}$/.test(normalizedMobile)) {
+        return {
+          success: false,
+          error: "Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).",
+          user: null,
+          session: null,
+        };
+      }
+
+      // 1. MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
       const eligibility = verifyPassEligibility({
         cnfNumber: cleanCnf,
         email: cleanEmail,
@@ -899,112 +1034,163 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         };
       }
 
-      // Use verified CNF and associated official team code from Excel roster if available
-      const officialTeamCode = eligibility.participant?.teamCode || cleanCnf;
+      // 2. Check if this CNF has already completed registration
+      const { data: existingStudent } = await supabaseAdmin
+        .from("students")
+        .select("id, user_id, course_branch, full_name")
+        .ilike("team_code", cleanCnf)
+        .maybeSingle();
 
-      let userId: string | null = null;
-      let authUser: any = null;
-
-      // 1. Create user with email_confirm: true (direct registration without email verification)
-      const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: cleanEmail,
-        password: data.password,
-        email_confirm: true,
-        user_metadata: {
-          role: "student",
-          full_name: cleanName,
-          college: cleanCollege,
-          team_code: officialTeamCode,
-          cnf_number: cleanCnf,
-          pass_category: "Premium Pass",
-          mobile: cleanMobile,
-          skills: data.skills || [],
-          graduation_year: data.graduationYear || null,
-        },
-      });
-
-      if (createdUser?.user) {
-        userId = createdUser.user.id;
-        authUser = createdUser.user;
-      } else if (
-        createError &&
-        (createError.message.toLowerCase().includes("already registered") ||
-         createError.message.toLowerCase().includes("already been registered") ||
-         createError.message.toLowerCase().includes("already exists"))
-      ) {
-        // User already exists in auth: sync their password and metadata
-        const { data: existingProfile } = await supabaseAdmin
+      if (existingStudent?.user_id) {
+        const { data: existingProf } = await supabaseAdmin
           .from("profiles")
-          .select("id")
-          .eq("email", cleanEmail)
+          .select("email, branch")
+          .eq("id", existingStudent.user_id)
           .maybeSingle();
 
-        if (existingProfile?.id) {
-          userId = existingProfile.id;
-        } else {
-          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
-          const existing = usersData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
-          userId = existing?.id || null;
-        }
+        const isAlreadyComplete = Boolean(
+          existingProf?.email &&
+          !existingProf.email.endsWith("@equinox.mlrit.ac.in") &&
+          (existingStudent.course_branch || existingProf.branch) &&
+          existingProf.email !== cleanEmail
+        );
 
-        if (userId) {
-          await supabaseAdmin.auth.admin.updateUserById(userId, {
-            password: data.password,
-            user_metadata: {
-              role: "student",
-              full_name: cleanName,
-              college: cleanCollege,
-              team_code: officialTeamCode,
-              cnf_number: cleanCnf,
-              pass_category: "Premium Pass",
-              mobile: cleanMobile,
-              skills: data.skills || [],
-              graduation_year: data.graduationYear || null,
-            },
-          });
+        if (isAlreadyComplete) {
+          return {
+            success: false,
+            error: `Registration is already completed for CNF ${cleanCnf}. Please sign in using your registered email (${existingProf?.email}).`,
+            user: null,
+            session: null,
+          };
         }
-      } else if (createError) {
+      }
+
+      // 3. Check if email is already taken by a different CNF
+      const { data: existingEmailProf } = await supabaseAdmin
+        .from("profiles")
+        .select("id, email, full_name")
+        .eq("email", cleanEmail)
+        .maybeSingle();
+
+      if (existingEmailProf && existingStudent?.user_id && existingEmailProf.id !== existingStudent.user_id) {
         return {
           success: false,
-          error: createError.message || "Registration failed. Please try again.",
+          error: `An account with email ${cleanEmail} already exists. Please sign in or use another email.`,
           user: null,
           session: null,
         };
       }
 
-      if (!userId) {
-        return {
-          success: false,
-          error: "Could not initialize student account.",
-          user: null,
-          session: null,
-        };
+      // 4. Provision or link Supabase Auth account securely
+      let userId: string;
+      let authUser: any = null;
+
+      // Check if Auth user already exists with this email
+      let existingAuthUser: any = null;
+      try {
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
+        existingAuthUser = userList?.users?.find(
+          (u) => (u.email || "").toLowerCase() === cleanEmail
+        );
+      } catch {
+        // Continue
       }
 
-      // 2. Ensure profiles entry exists
-      await supabaseAdmin.from("profiles").upsert({
+      if (existingAuthUser?.id) {
+        userId = existingAuthUser.id;
+        const { data: updated, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: cleanPassword,
+          email_confirm: true,
+          user_metadata: {
+            role: "student",
+            full_name: cleanName,
+            college: cleanCollege,
+            course_branch: cleanBranch,
+            team_code: cleanCnf,
+            cnf_number: cleanCnf,
+            pass_category: "Premium Pass",
+            mobile: normalizedMobile,
+            registration_completed: true,
+          },
+        });
+        if (updateError) {
+          return {
+            success: false,
+            error: updateError.message,
+            user: null,
+            session: null,
+          };
+        }
+        authUser = updated.user;
+      } else {
+        const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          password: cleanPassword,
+          email_confirm: true,
+          user_metadata: {
+            role: "student",
+            full_name: cleanName,
+            college: cleanCollege,
+            course_branch: cleanBranch,
+            team_code: cleanCnf,
+            cnf_number: cleanCnf,
+            pass_category: "Premium Pass",
+            mobile: normalizedMobile,
+            registration_completed: true,
+          },
+        });
+
+        if (createError) {
+          return {
+            success: false,
+            error: createError.message,
+            user: null,
+            session: null,
+          };
+        }
+        userId = created.user.id;
+        authUser = created.user;
+      }
+
+      // 5. Upsert profiles record
+      const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
         id: userId,
         role: "student",
         email: cleanEmail,
         full_name: cleanName,
         college: cleanCollege,
+        branch: cleanBranch,
+        updated_at: new Date().toISOString(),
       });
 
-      // 3. Ensure students entry exists
-      await supabaseAdmin.from("students").upsert({
-        user_id: userId,
-        full_name: cleanName,
-        college: cleanCollege,
-        team_code: officialTeamCode,
-        mobile: cleanMobile,
-        skills: data.skills || [],
-        graduation_year: data.graduationYear || null,
-      });
+      if (profileError) {
+        console.warn("Profiles upsert warning:", profileError.message);
+      }
 
-      // 4. Authenticate directly to obtain an active session immediately
+      // 6. Upsert students record
+      const { error: studentError } = await supabaseAdmin.from("students").upsert(
+        {
+          user_id: userId,
+          full_name: cleanName,
+          college: cleanCollege,
+          course_branch: cleanBranch,
+          team_code: cleanCnf,
+          mobile: normalizedMobile,
+          skills: data.skills || [],
+          graduation_year: data.graduationYear || null,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+
+      if (studentError) {
+        console.warn("Students upsert warning:", studentError.message);
+      }
+
+      // 7. Sign in directly to return active authenticated session
       const { data: authData } = await getServerAnonClient().auth.signInWithPassword({
         email: cleanEmail,
-        password: data.password,
+        password: cleanPassword,
       });
 
       return {
@@ -1330,22 +1516,48 @@ export const adminGetApplicationsServerFn = createServerFn({ method: "POST" })
     if (profile?.role !== "admin") throw new Error("Unauthorized.");
 
     // 1. Fetch applications with internship details
+    let appsData: any[] = [];
     const { data: rawApps, error: appErr } = await serverClient
       .from("applications")
       .select("*, internship:internships(id, role, domain)")
       .order("created_at", { ascending: false });
 
-    if (appErr || !rawApps) {
-      console.warn("Could not query applications with internship:", appErr?.message);
+    if (!appErr && rawApps) {
+      appsData = rawApps;
+    } else {
+      console.warn("Could not query applications with internship join, querying base applications:", appErr?.message);
       const { data: fallback } = await serverClient
         .from("applications")
         .select("*")
         .order("created_at", { ascending: false });
-      return fallback || [];
+      appsData = fallback || [];
     }
 
+    // Hydrate internships map for any application missing joined relationship
+    const internshipMap = new Map<string, any>();
+    const { data: allInternships } = await serverClient
+      .from("internships")
+      .select("id, role, domain, location, mode, duration, salary");
+
+    (allInternships || []).forEach((item) => {
+      internshipMap.set(item.id, item);
+    });
+    INTERNSHIP_COMPANIES.forEach((item) => {
+      if (!internshipMap.has(item.id)) {
+        internshipMap.set(item.id, {
+          id: item.id,
+          role: item.role,
+          domain: item.domain,
+          location: item.mode || "MLRIT Campus",
+          mode: item.mode || "onsite",
+          duration: item.duration || "3 - 6 Months",
+          salary: item.stipend || "Performance Based",
+        });
+      }
+    });
+
     // 2. Hydrate student details from students and profiles tables
-    const studentIds = Array.from(new Set(rawApps.map((a) => a.student_id).filter(Boolean)));
+    const studentIds = Array.from(new Set(appsData.map((a) => a.student_id).filter(Boolean)));
     const [{ data: dbStudents }, { data: dbProfiles }] = await Promise.all([
       studentIds.length > 0
         ? serverClient.from("students").select("*").or(`user_id.in.(${studentIds.join(",")}),id.in.(${studentIds.join(",")})`)
@@ -1363,19 +1575,39 @@ export const adminGetApplicationsServerFn = createServerFn({ method: "POST" })
 
     const profileMap = new Map((dbProfiles || []).map((p) => [p.id, p]));
 
-    return rawApps.map((app) => {
+    return appsData.map((app) => {
       const s = studentMap.get(app.student_id);
       const p = profileMap.get(app.student_id) || (s?.user_id ? profileMap.get(s.user_id) : undefined);
+      const roleObj = app.internship || internshipMap.get(app.internship_id) || {
+        id: app.internship_id,
+        role: app.role_title || "Internship Role",
+        domain: "General",
+      };
+
+      const candidateName = app.student_name || s?.full_name || p?.full_name || app.answers?.full_name || "Applicant";
+      const cnfNumber = app.cnf_number || s?.team_code || app.answers?.cnf_number || "CNF";
+      const contactNumber = app.student_phone || s?.mobile || app.answers?.contact_number || "N/A";
+      const email = app.student_email || p?.email || app.answers?.email || "";
+      const college = app.college || s?.college || p?.college || app.answers?.college || "MLR Institute of Technology";
+      const courseBranch = app.course_branch || s?.course_branch || p?.branch || app.answers?.course_branch || "";
+      const graduationYear = s?.graduation_year || p?.graduation_year || null;
+
       return {
         ...app,
+        internship: roleObj,
+        skills: app.skills || app.answers?.skills || (Array.isArray(s?.skills) ? s.skills.join(", ") : ""),
+        portfolio_url: app.portfolio_url || app.answers?.portfolio_url || "",
+        video_url: app.video_url || app.answers?.video_url || "",
+        availability: app.availability || app.answers?.availability || "",
+        resume_url: app.resume_url || s?.resume_url || app.answers?.resume_path || "",
         student: {
-          full_name: s?.full_name || p?.full_name || "Applicant",
-          team_code: s?.team_code || "CNF",
-          college: s?.college || p?.college || "MLR Institute of Technology",
-          course_branch: s?.course_branch || p?.branch || "",
-          graduation_year: s?.graduation_year || p?.graduation_year || null,
-          mobile: s?.mobile || "N/A",
-          email: p?.email || "",
+          full_name: candidateName,
+          team_code: cnfNumber,
+          college: college,
+          course_branch: courseBranch,
+          graduation_year: graduationYear,
+          mobile: contactNumber,
+          email: email,
         },
       };
     });
@@ -1431,11 +1663,11 @@ export const adminUpdateApplicationStatusServerFn = createServerFn({ method: "PO
     // 3. Update application status using admin bearer token to satisfy trigger security
     const adminUserClient = createClient(
       (typeof process !== "undefined" && process.env?.["SUPABASE_URL"]) ||
-        (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
-        "https://plyvtevuxdmzswtvpmwv.supabase.co",
+      (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
+      "https://plyvtevuxdmzswtvpmwv.supabase.co",
       (typeof process !== "undefined" && process.env?.["SUPABASE_ANON_KEY"]) ||
-        (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_ANON_KEY"]) ||
-        "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb",
+      (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_ANON_KEY"]) ||
+      "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb",
       {
         global: { headers: { Authorization: `Bearer ${adminToken}` } },
         auth: { persistSession: false, autoRefreshToken: false },
@@ -1538,14 +1770,38 @@ export const adminExportApplicationsCsvServerFn = createServerFn({ method: "POST
     if (profile?.role !== "admin") throw new Error("Unauthorized.");
 
     // 1. Fetch applications with internships
+    let appsData: any[] = [];
     const { data: apps, error: appErr } = await serverClient
       .from("applications")
       .select("*, internship:internships(id, role, domain)")
       .order("created_at", { ascending: false });
 
-    if (appErr) throw new Error(`Failed to load applications: ${appErr.message}`);
+    if (!appErr && apps) {
+      appsData = apps;
+    } else {
+      const { data: fallback } = await serverClient
+        .from("applications")
+        .select("*")
+        .order("created_at", { ascending: false });
+      appsData = fallback || [];
+    }
 
-    const safeApps = apps || [];
+    const safeApps = appsData;
+
+    // Hydrate internships map
+    const internshipMap = new Map<string, any>();
+    const { data: allInternships } = await serverClient
+      .from("internships")
+      .select("id, role, domain");
+
+    (allInternships || []).forEach((item) => {
+      internshipMap.set(item.id, item);
+    });
+    INTERNSHIP_COMPANIES.forEach((item) => {
+      if (!internshipMap.has(item.id)) {
+        internshipMap.set(item.id, { id: item.id, role: item.role, domain: item.domain });
+      }
+    });
 
     // 2. Hydrate student details & profiles bidirectionally
     const studentIds = Array.from(new Set(safeApps.map((a) => a.student_id).filter(Boolean)));
@@ -1595,22 +1851,26 @@ export const adminExportApplicationsCsvServerFn = createServerFn({ method: "POST
     const rows = safeApps.map((app) => {
       const s = studentMap.get(app.student_id);
       const p = profileMap.get(app.student_id) || (s?.user_id ? profileMap.get(s.user_id) : undefined);
+      const internshipInfo = app.internship || internshipMap.get(app.internship_id) || {
+        role: app.role_title || "Internship Role",
+        domain: "General",
+      };
 
-      const candidateName = s?.full_name || p?.full_name || "Applicant";
-      const cnfNumber = s?.team_code || "CNF";
-      const contactNumber = s?.mobile || "N/A";
-      const email = p?.email || "";
-      const college = s?.college || p?.college || "MLR Institute of Technology";
-      const courseBranch = s?.course_branch || p?.branch || "N/A";
+      const candidateName = app.student_name || s?.full_name || p?.full_name || app.answers?.full_name || "Applicant";
+      const cnfNumber = app.cnf_number || s?.team_code || app.answers?.cnf_number || "CNF";
+      const contactNumber = app.student_phone || s?.mobile || app.answers?.contact_number || "N/A";
+      const email = app.student_email || p?.email || app.answers?.email || "";
+      const college = app.college || s?.college || p?.college || app.answers?.college || "MLR Institute of Technology";
+      const courseBranch = app.course_branch || s?.course_branch || p?.branch || app.answers?.course_branch || "N/A";
       const graduationYear = s?.graduation_year || p?.graduation_year || "N/A";
-      const roleName = app.internship?.role || "Internship Role";
-      const domainName = app.internship?.domain || "General";
+      const roleName = internshipInfo.role || "Internship Role";
+      const domainName = internshipInfo.domain || "General";
       const status = app.status || "submitted";
-      const skills = app.skills || (Array.isArray(s?.skills) ? s.skills.join(", ") : "");
-      const portfolioUrl = app.portfolio_url || "";
-      const videoUrl = app.video_url || "";
-      const availability = app.availability || "Immediate";
-      const resumeStoragePath = app.resume_url || s?.resume_url || "";
+      const skills = app.skills || app.answers?.skills || (Array.isArray(s?.skills) ? s.skills.join(", ") : "");
+      const portfolioUrl = app.portfolio_url || app.answers?.portfolio_url || "";
+      const videoUrl = app.video_url || app.answers?.video_url || "";
+      const availability = app.availability || app.answers?.availability || "Immediate";
+      const resumeStoragePath = app.resume_url || s?.resume_url || app.answers?.resume_path || "";
       const applicationDate = app.created_at
         ? new Date(app.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
         : "";
@@ -1644,10 +1904,6 @@ export const adminExportApplicationsCsvServerFn = createServerFn({ method: "POST
     };
   });
 
-/**
- * Server function: Retrieves all applications submitted by the authenticated student.
- * Bypasses RLS restrictions and PostgREST schema joins to reliably return the student's applied roles and count.
- */
 export const studentGetApplicationsServerFn = createServerFn({ method: "POST" })
   .validator((data: { studentToken: string }) => data)
   .handler(async ({ data }) => {

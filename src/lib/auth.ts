@@ -12,6 +12,7 @@ export interface AuthUser {
   mobile?: string | undefined;
   teamCode?: string | undefined;
   email?: string | undefined;
+  registrationCompleted?: boolean | undefined;
 }
 
 const AUTH_STORAGE_KEY = "equinox_auth_user";
@@ -97,6 +98,7 @@ export function useAuth() {
           branch: res.branch ?? undefined,
           mobile: res.mobile ?? undefined,
           teamCode: res.teamCode ?? undefined,
+          registrationCompleted: res.registrationCompleted ?? false,
         };
 
         loginUser(authUser);
@@ -151,6 +153,7 @@ export function useAuth() {
             branch: res.branch ?? undefined,
             mobile: res.mobile ?? undefined,
             teamCode: res.teamCode ?? undefined,
+          registrationCompleted: res.registrationCompleted ?? false,
           };
 
           loginUser(authUser);

@@ -76,6 +76,20 @@ export function StudentApplicationForm({
     };
   }, [initialRoleId, preferredRole]);
 
+  // Pre-fill student details from authenticated session
+  useEffect(() => {
+    if (user) {
+      if (!fullName && (user.fullName || user.name)) setFullName(user.fullName || user.name || "");
+      if (!email && user.email) setEmail(user.email);
+      if (!contactNumber && user.mobile) setContactNumber(user.mobile);
+      if (!instituteAndBranch) {
+        const inst = user.college || "MLR Institute of Technology";
+        const br = user.branch || "";
+        setInstituteAndBranch(br ? `${inst} - ${br}` : inst);
+      }
+    }
+  }, [user]);
+
   // Real-time helper to clear field-level errors upon typing
   const handleTextChange = (field: keyof FormErrors, setter: (val: string) => void) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -150,6 +164,14 @@ export function StudentApplicationForm({
         errors.resumeFile = "Only PDF, DOC, or DOCX files are accepted.";
       } else if (resumeFile.size > 10 * 1024 * 1024) {
         errors.resumeFile = "Resume file size must be less than 10MB.";
+      } else {
+        // Enforce CNFNUMBER_NAME naming format
+        const cleanCnf = (user?.teamCode || "").replace(/[^A-Za-z0-9]/g, "");
+        const upperName = resumeFile.name.toUpperCase();
+        if (cleanCnf && !upperName.includes(cleanCnf)) {
+          const expectedFormat = `${user?.teamCode || "CNFNUMBER"}_${(fullName.trim() || user?.fullName || "YOURNAME").replace(/\s+/g, "_")}.pdf`;
+          errors.resumeFile = `Resume filename must follow the required format: ${expectedFormat}. Please rename your file before uploading.`;
+        }
       }
     }
 
@@ -198,6 +220,11 @@ export function StudentApplicationForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    if (user?.role === "student" && user?.registrationCompleted === false) {
+      setErrorMessage("Registration Incomplete: Please complete your official Internship Drive registration first.");
+      return;
+    }
 
     if (!validateForm()) {
       setErrorMessage("Please fix the highlighted validation errors before submitting.");
@@ -268,6 +295,20 @@ export function StudentApplicationForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="w-full space-y-6">
+      {user?.role === "student" && user?.registrationCompleted === false && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-300">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 shrink-0 text-amber-400" />
+            <span>Registration required: Please complete your Internship Drive candidate registration before submitting applications.</span>
+          </div>
+          <a
+            href={user?.teamCode ? `/register?cnf=${encodeURIComponent(user.teamCode)}` : "/register"}
+            className="btn btn-signal h-8 px-3 text-xs font-bold shrink-0 flex items-center justify-center"
+          >
+            Complete Registration
+          </a>
+        </div>
+      )}
       {errorMessage && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-300">
           <div className="flex items-center gap-2">

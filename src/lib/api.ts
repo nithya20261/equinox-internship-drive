@@ -5,6 +5,8 @@ import {
   loginAdminServerFn,
   studentSubmitApplicationServerFn,
   registerStudentServerFn,
+  verifyStudentCnfServerFn,
+  type VerifyStudentCnfResult,
   adminCreateOrUpdateRoleServerFn,
   adminDeleteRoleServerFn,
   adminGetRolesServerFn,
@@ -27,8 +29,12 @@ export interface StudentRegistrationInput {
   email: string;
   password: string;
   college: string;
+  course_branch: string;
   cnf_number: string;
   mobile: string;
+  confirm_password?: string | undefined;
+  video_url?: string | undefined;
+  resume_file?: File | null | undefined;
   team_code?: string | undefined;
   skills?: string[] | undefined;
   graduation_year?: number | undefined;
@@ -67,6 +73,7 @@ export interface StudentApplicationFormData {
   relevantSkills: string;
   portfolioUrl?: string | undefined; // Optional: Projects / Portfolio / GitHub / LinkedIn
   availability: string;
+  answers?: Record<string, unknown> | undefined;
 }
 
 export interface StudentApplication {
@@ -79,6 +86,14 @@ export interface StudentApplication {
   skills?: string | null;
   portfolio_url?: string | null;
   availability?: string | null;
+  student_name?: string | null;
+  student_email?: string | null;
+  student_phone?: string | null;
+  college?: string | null;
+  course_branch?: string | null;
+  cnf_number?: string | null;
+  role_title?: string | null;
+  answers?: Record<string, unknown> | null;
   internship?: {
     id: string;
     role: string;
@@ -164,13 +179,84 @@ export async function uploadResumeFile(
  * Creates an auto-confirmed user account, profile, and student entry,
  * and activates the authenticated session immediately.
  */
-export async function registerStudentWithResume(input: StudentRegistrationInput) {
+/**
+ * Server-verified CNF pre-check for registration eligibility.
+ */
+export async function verifyStudentCnf(cnfNumber: string): Promise<VerifyStudentCnfResult> {
+  const cleanCnf = (cnfNumber || "").trim().toUpperCase();
+  if (!cleanCnf) {
+    return {
+      allowed: false,
+      errorCode: "MISSING_CNF",
+      reason: "Confirmation Number (CNF) is required.",
+    };
+  }
+
+  try {
+    const result = await verifyStudentCnfServerFn({
+      data: { cnfNumber: cleanCnf },
+    });
+    return result;
+  } catch (err: unknown) {
+    console.warn("verifyStudentCnfServerFn error caught:", err);
+    return {
+      allowed: false,
+      cnf: cleanCnf,
+      reason: err instanceof Error ? err.message : "Verification service temporarily unavailable.",
+    };
+  }
+}
+
+export async function registerStudent(input: StudentRegistrationInput) {
   const cleanEmail = input.email.trim().toLowerCase();
   const cleanCnf = (input.cnf_number || "").trim().toUpperCase();
   const cleanName = input.full_name.trim();
-  const cleanCollege = input.college.trim();
+  const cleanCollege = (input.college || "MLR Institute of Technology").trim();
+  const cleanBranch = (input.course_branch || "").trim();
   const cleanMobile = input.mobile.trim();
   const cleanTeamCode = (input.team_code || cleanCnf).trim().toUpperCase();
+  const resumeFile = input.resume_file || input.resume;
+  const cleanVideoUrl = (input.video_url || "").trim();
+
+  if (!cleanName || !cleanCnf || !cleanEmail || !input.password) {
+    throw new Error("Full name, Confirmation Number (CNF), email, and password are required.");
+  }
+  if (!cleanBranch) {
+    throw new Error("Course / Branch is required (e.g. B.Tech Computer Science and Engineering).");
+  }
+  if (!cleanMobile) {
+    throw new Error("Mobile number is required.");
+  }
+
+  // Handle optional resume if provided
+  let resumeBase64: string | undefined;
+  let resumeFileName: string | undefined;
+  let resumeMimeType: string | undefined;
+
+  if (resumeFile) {
+    if (resumeFile.size > 10 * 1024 * 1024) {
+      throw new Error("Resume file exceeds 10MB limit. Please choose a smaller file.");
+    }
+    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    const fileName = resumeFile.name;
+    const isAllowedExt = allowedExtensions.some((ext) => fileName.toLowerCase().endsWith(ext));
+    if (!isAllowedExt) {
+      throw new Error("Resume must be in PDF, DOC, or DOCX format.");
+    }
+
+    resumeFileName = fileName;
+    resumeMimeType = resumeFile.type || "application/pdf";
+
+    const arrayBuffer = await resumeFile.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(arrayBuffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      const byte = bytes[i];
+      if (byte !== undefined) binary += String.fromCharCode(byte);
+    }
+    resumeBase64 = btoa(binary);
+  }
 
   let serverResult: any = null;
   let serverError: string | null = null;
@@ -180,10 +266,16 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
       data: {
         email: cleanEmail,
         password: input.password,
+        confirmPassword: input.confirm_password,
         fullName: cleanName,
         cnfNumber: cleanCnf,
         college: cleanCollege,
+        courseBranch: cleanBranch,
         mobile: cleanMobile,
+        videoUrl: cleanVideoUrl || undefined,
+        resumeBase64,
+        resumeFileName,
+        resumeMimeType,
         teamCode: cleanTeamCode,
         skills: input.skills ?? [],
         graduationYear: input.graduation_year ?? null,
@@ -200,12 +292,16 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
       (err.message.includes("Denied") ||
        err.message.includes("required") ||
        err.message.includes("Restricted") ||
+       err.message.includes("already completed") ||
+       err.message.includes("already exists") ||
        err.message.includes("Password") ||
+       err.message.includes("Passwords do not match") ||
        err.message.includes("eligible"))
     ) {
       throw err;
     }
-    console.warn("registerStudentServerFn error, attempting direct client fallback:", err);
+    console.warn("registerStudentServerFn error:", err);
+    throw err;
   }
 
   // If server function succeeded and returned a session/user
@@ -221,94 +317,16 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
       id: serverResult.user.id,
       role: "student",
       name: cleanName,
-      teamCode: serverResult.user.user_metadata?.team_code || cleanCnf,
+      fullName: cleanName,
+      college: cleanCollege,
+      branch: cleanBranch,
+      mobile: cleanMobile,
+      teamCode: cleanTeamCode,
       email: cleanEmail,
+      registrationCompleted: true,
     });
 
     return { confirmationRequired: false, user: serverResult.user };
-  }
-
-  // Direct client Supabase fallback
-  try {
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: input.password,
-      options: {
-        data: {
-          role: "student",
-          full_name: cleanName,
-          college: input.college.trim(),
-          team_code: cleanTeamCode,
-          mobile: input.mobile.trim(),
-        },
-      },
-    });
-
-    let clientUser = signUpData?.user;
-    let clientSession = signUpData?.session;
-
-    if (
-      signUpError &&
-      (signUpError.message.toLowerCase().includes("already registered") ||
-       signUpError.message.toLowerCase().includes("already been registered") ||
-       signUpError.message.toLowerCase().includes("already exists"))
-    ) {
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: input.password,
-      });
-
-      if (signInError) {
-        throw new Error(serverError || "An account with this email is already registered. Please sign in with your password on the login page.");
-      }
-
-      clientUser = signInData.user;
-      clientSession = signInData.session;
-    } else if (signUpError) {
-      throw new Error(serverError || signUpError.message || "Registration failed. Please try again.");
-    }
-
-    if (clientSession) {
-      await supabase.auth.setSession({
-        access_token: clientSession.access_token,
-        refresh_token: clientSession.refresh_token,
-      });
-    }
-
-    if (clientUser) {
-      try {
-        await supabase.from("profiles").upsert({
-          id: clientUser.id,
-          role: "student",
-          email: cleanEmail,
-          full_name: cleanName,
-          college: input.college.trim(),
-        });
-      } catch {}
-
-      try {
-        await supabase.from("students").upsert({
-          user_id: clientUser.id,
-          full_name: cleanName,
-          college: input.college.trim(),
-          team_code: cleanTeamCode,
-          mobile: input.mobile.trim(),
-        });
-      } catch {}
-
-      loginUser({
-        id: clientUser.id,
-        role: "student",
-        name: cleanName,
-        teamCode: cleanTeamCode,
-        email: cleanEmail,
-      });
-
-      return { confirmationRequired: false, user: clientUser };
-    }
-  } catch (clientErr: any) {
-    const errorMsg = clientErr?.message || serverError || "Registration failed. Please check your details and try again.";
-    throw new Error(errorMsg);
   }
 
   if (serverError) {
@@ -318,10 +336,8 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
   throw new Error("Could not complete registration. Please try logging in or try again.");
 }
 
-/**
- * Student login using secure server-side authentication with rate limiting.
- * The student's email is NEVER exposed or returned to unauthenticated clients.
- */
+export const registerStudentWithResume = registerStudent;
+
 export async function loginStudent(credentials: {
   cnfNumber?: string;
   email?: string;
@@ -335,7 +351,17 @@ export async function loginStudent(credentials: {
   const fullName = (credentials.name || "").trim();
   const cleanPassword = credentials.password.trim();
 
-  // Execute server-side authenticated flow supporting both CNF numbers and registered emails
+  // Reject empty inputs immediately
+  if (!rawInput || !cleanPassword) {
+    throw new Error("Registered email and password are required.");
+  }
+
+  // Reject dummy email logins directly
+  if (isEmail && rawInput.toLowerCase().endsWith("@equinox.mlrit.ac.in")) {
+    throw new Error("Direct CNF login is disabled. Please verify your CNF on the Registration page and complete your registration before logging in.");
+  }
+
+  // Execute server-side authenticated flow
   try {
     const result = await loginStudentServerFn({
       data: {
@@ -357,94 +383,32 @@ export async function loginStudent(credentials: {
       // Fetch student details for local store
       const { data: student } = await supabase
         .from("students")
-        .select("full_name, team_code")
+        .select("full_name, team_code, college, course_branch")
         .eq("user_id", result.user.id)
         .maybeSingle();
 
-      const meta = result.user.user_metadata;
+      const meta = (result.user.user_metadata || {}) as Record<string, any>;
+
       loginUser({
         id: result.user.id,
         role: "student",
         name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName || rawInput,
+        fullName: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName,
+        college: student?.college || (meta?.["college"] as string | undefined),
+        branch: student?.course_branch || (meta?.["course_branch"] as string | undefined),
         teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || rawInput,
         email: result.user.email ?? undefined,
+        registrationCompleted: true,
       });
 
       return result;
     }
   } catch (err: any) {
-    console.warn("loginStudentServerFn encountered error, attempting direct client fallback:", err);
+    // Always re-throw authoritative server validation and registration errors
+    throw err;
   }
 
-  // Direct client Supabase fallback
-  const cleanCnf = cnfNumber.replace(/-/g, "").toLowerCase();
-  const emailsToTry: string[] = [];
-
-  if (rawInput.includes("@")) {
-    emailsToTry.push(rawInput.toLowerCase());
-  }
-  emailsToTry.push(`${cleanCnf}@equinox.mlrit.ac.in`);
-  emailsToTry.push(`${cnfNumber.toLowerCase()}@equinox.mlrit.ac.in`);
-
-  // Also check if there is an existing student registered with this team code or cnf number
-  try {
-    const { data: st } = await supabase
-      .from("students")
-      .select("user_id, team_code")
-      .ilike("team_code", rawInput)
-      .maybeSingle();
-
-    if (st?.user_id) {
-      const { data: pr } = await supabase
-        .from("profiles")
-        .select("email")
-        .eq("id", st.user_id)
-        .maybeSingle();
-
-      if (pr?.email && !emailsToTry.includes(pr.email.toLowerCase())) {
-        emailsToTry.unshift(pr.email.toLowerCase());
-      }
-    }
-  } catch {
-    // Ignore lookup errors
-  }
-
-  let authData: any = null;
-  for (const email of emailsToTry) {
-    const res = await supabase.auth.signInWithPassword({
-      email,
-      password: cleanPassword,
-    });
-    if (res.data?.session) {
-      authData = res.data;
-      break;
-    }
-  }
-
-  if (authData?.session && authData?.user) {
-    await supabase.auth.setSession({
-      access_token: authData.session.access_token,
-      refresh_token: authData.session.refresh_token,
-    });
-
-    const { data: student } = await supabase
-      .from("students")
-      .select("full_name, team_code")
-      .eq("user_id", authData.user.id)
-      .maybeSingle();
-
-    loginUser({
-      id: authData.user.id,
-      role: "student",
-      name: student?.full_name || (authData.user.user_metadata?.["full_name"] as string | undefined) || fullName || rawInput,
-      teamCode: student?.team_code || (authData.user.user_metadata?.["team_code"] as string | undefined) || rawInput,
-      email: authData.user.email ?? undefined,
-    });
-
-    return { session: authData.session, user: authData.user };
-  }
-
-  throw new Error("Student authentication failed. Please check your Confirmation Number / Email and Password.");
+  throw new Error("Login failed. Please verify your registered email and password.");
 }
 
 export async function loginAdmin(credentials: { username: string; password: string }) {
@@ -910,6 +874,7 @@ export async function submitStudentApplication(
         skills: form.relevantSkills.trim(),
         portfolioUrl: form.portfolioUrl?.trim() || undefined,
         availability: form.availability.trim(),
+        answers: form.answers,
       },
     });
 
