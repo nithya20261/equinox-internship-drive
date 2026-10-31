@@ -166,165 +166,219 @@ export interface AdminAuthPayload {
   password: string;
 }
 
-export const loginStudentServerFn = createServerFn({ method: "POST" })
-  .validator((data: StudentAuthPayload) => data)
-  .handler(async ({ data }) => {
-    const rawInput = (data.email || data.cnfNumber || data.teamCode || "").trim();
-    const rawPassword = data.password ?? "";
+/**
+ * Authoritative core student login handler.
+ * Supports registered email + password OR CNF number + password.
+ * Resolves CNF to the student's registered account.
+ * Does not overwrite or reset passwords. Does not auto-create accounts for unregistered CNFs.
+ */
+export async function loginStudentCore(data: StudentAuthPayload) {
+  const rawInput = (data.email || data.cnfNumber || data.teamCode || "").trim();
+  const rawPassword = data.password ?? "";
 
-    if (!rawInput || !rawPassword) {
-      throw new Error("Confirmation number or email and password are required.");
-    }
+  if (!rawInput || !rawPassword) {
+    throw new Error("Confirmation number or email and password are required.");
+  }
 
-    const serverClient = getServerSupabase();
-    const anonClient = getServerAnonClient();
+  const serverClient = getServerSupabase();
+  const anonClient = getServerAnonClient();
 
-    let targetEmail: string | null = null;
-    let rateLimitKey: string;
-    let candidateName: string | null = null;
-    let candidateTeamCode: string | null = null;
+  let targetEmail: string | null = null;
+  let rateLimitKey: string;
+  let candidateName: string | null = null;
+  let candidateTeamCode: string | null = null;
+  let candidateUserId: string | null = null;
 
-    if (rawInput.includes("@")) {
-      const cleanEmail = rawInput.toLowerCase();
-      rateLimitKey = `student:email:${cleanEmail}`;
-      targetEmail = cleanEmail;
-    } else {
-      const normalizedCnf = rawInput.toUpperCase();
-      rateLimitKey = `student:cnf:${normalizedCnf}`;
+  if (rawInput.includes("@")) {
+    const cleanEmail = rawInput.toLowerCase();
+    rateLimitKey = `student:email:${cleanEmail}`;
+    targetEmail = cleanEmail;
 
-      // 1. Resolve CNF number from students table (stored in team_code)
-      const { data: studentRecord } = await serverClient
-        .from("students")
-        .select("user_id, team_code, full_name, college")
-        .ilike("team_code", normalizedCnf)
-        .maybeSingle();
-
-      if (studentRecord?.user_id) {
-        candidateName = studentRecord.full_name;
-        candidateTeamCode = studentRecord.team_code;
-        const { data: profile } = await serverClient
-          .from("profiles")
-          .select("email, full_name, college")
-          .eq("id", studentRecord.user_id)
-          .maybeSingle();
-
-        if (profile?.email) {
-          targetEmail = profile.email.toLowerCase();
-        }
-      }
-
-      // 2. Fallback: Check if synthetic email exists in profiles or auth
-      if (!targetEmail) {
-        const syntheticEmail = `${normalizedCnf.toLowerCase()}@equinox.mlrit.ac.in`;
-        const { data: synthProfile } = await serverClient
-          .from("profiles")
-          .select("id, email, full_name")
-          .eq("email", syntheticEmail)
-          .maybeSingle();
-
-        if (synthProfile?.email) {
-          targetEmail = synthProfile.email.toLowerCase();
-          candidateName = synthProfile.full_name;
-        } else {
-          targetEmail = syntheticEmail;
-        }
-      }
-    }
-
-    // Apply durable rate limiting per account/CNF
-    await verifyDurableRateLimit(rateLimitKey);
-
-    if (!targetEmail) {
-      throw new Error("Invalid confirmation number, email, or password.");
-    }
-
-    // Authenticate with Supabase Auth using student's actual password
-    const { data: authResult, error: authError } = await anonClient.auth.signInWithPassword({
-      email: targetEmail,
-      password: rawPassword,
-    });
-
-    if (authError || !authResult?.session || !authResult?.user) {
-      throw new Error("Invalid confirmation number, email, or password.");
-    }
-
-    const userId = authResult.user.id;
-
-    // Reject administrator accounts attempting student login
+    // Verify student exists in profiles and is a student
     const { data: profile } = await serverClient
       .from("profiles")
       .select("id, role, full_name, college, email")
-      .eq("id", userId)
+      .eq("email", cleanEmail)
       .maybeSingle();
 
-    if (profile?.role === "admin") {
-      throw new Error("This is an administrator account. Please use the Admin Login tab.");
+    if (profile) {
+      if (profile.role === "admin") {
+        throw new Error("This is an administrator account. Please use the Admin Login tab.");
+      }
+      candidateUserId = profile.id;
+      candidateName = profile.full_name;
     }
+  } else {
+    const normalizedCnf = rawInput.toUpperCase();
+    rateLimitKey = `student:cnf:${normalizedCnf}`;
 
-    // Ensure profiles and students rows are synchronized
-    const displayName =
-      profile?.full_name ||
-      candidateName ||
-      (authResult.user.user_metadata?.["full_name"] as string | undefined) ||
-      (data.fullName as string | undefined) ||
-      targetEmail.split("@")[0];
-
-    const teamCode =
-      candidateTeamCode ||
-      (authResult.user.user_metadata?.["team_code"] as string | undefined) ||
-      (authResult.user.user_metadata?.["cnf_number"] as string | undefined) ||
-      (rawInput.includes("@") ? "EQX-STUDENT" : rawInput.toUpperCase());
-
-    if (!profile) {
-      await serverClient.from("profiles").upsert({
-        id: userId,
-        role: "student",
-        email: targetEmail,
-        full_name: displayName,
-      });
-    }
-
-    const { data: existingStudent } = await serverClient
+    // 1. Resolve CNF number from students table (stored in team_code)
+    const { data: studentRecords } = await serverClient
       .from("students")
-      .select("id, team_code, full_name")
-      .eq("user_id", userId)
-      .maybeSingle();
+      .select("user_id, team_code, full_name, college")
+      .ilike("team_code", normalizedCnf)
+      .order("created_at", { ascending: false });
 
-    if (!existingStudent) {
-      await serverClient.from("students").upsert({
-        user_id: userId,
-        full_name: displayName,
-        team_code: teamCode,
-        college: (authResult.user.user_metadata?.["college"] as string | undefined) || "MLR Institute of Technology",
-        mobile: (authResult.user.user_metadata?.["mobile"] as string | undefined) || "0000000000",
-      });
+    if (studentRecords && studentRecords.length > 0) {
+      // Find the record linked to a real registered email (not synthetic)
+      for (const rec of studentRecords) {
+        const { data: prof } = await serverClient
+          .from("profiles")
+          .select("id, email, full_name, college, role")
+          .eq("id", rec.user_id)
+          .maybeSingle();
+
+        if (prof?.email && !prof.email.endsWith("@equinox.mlrit.ac.in")) {
+          targetEmail = prof.email.toLowerCase();
+          candidateName = prof.full_name || rec.full_name;
+          candidateTeamCode = rec.team_code;
+          candidateUserId = prof.id;
+          break;
+        } else if (prof?.email && !targetEmail) {
+          targetEmail = prof.email.toLowerCase();
+          candidateName = prof.full_name || rec.full_name;
+          candidateTeamCode = rec.team_code;
+          candidateUserId = prof.id;
+        }
+      }
     }
 
-    await resetDurableRateLimit(rateLimitKey);
+    // Also check if any auth user has this cnf_number in metadata
+    if (!targetEmail || targetEmail.endsWith("@equinox.mlrit.ac.in")) {
+      const { data: usersData } = await serverClient.auth.admin.listUsers({ perPage: 1000 });
+      const matchedUser = usersData?.users?.find(
+        (u) =>
+          u.user_metadata?.["cnf_number"]?.toString().toUpperCase() === normalizedCnf ||
+          u.user_metadata?.["team_code"]?.toString().toUpperCase() === normalizedCnf
+      );
 
-    return {
-      session: authResult.session,
-      user: {
-        ...authResult.user,
-        user_metadata: {
-          ...authResult.user.user_metadata,
-          role: "student",
-          full_name: displayName,
-          team_code: existingStudent?.team_code || teamCode,
-        },
+      if (matchedUser?.email && !matchedUser.email.endsWith("@equinox.mlrit.ac.in")) {
+        targetEmail = matchedUser.email.toLowerCase();
+        candidateName = (matchedUser.user_metadata?.["full_name"] as string | undefined) || null;
+        candidateTeamCode = normalizedCnf;
+        candidateUserId = matchedUser.id;
+      }
+    }
+
+    // If still no registered student found, reject - DO NOT auto-create an account
+    if (!targetEmail || targetEmail.endsWith("@equinox.mlrit.ac.in")) {
+      throw new Error(
+        "This Confirmation Number (CNF) has not completed candidate registration yet. Please complete registration before logging in."
+      );
+    }
+  }
+
+  // Apply durable rate limiting per account/CNF
+  await verifyDurableRateLimit(rateLimitKey);
+
+  // Authenticate with Supabase Auth using student's actual password
+  let { data: authResult, error: authError } = await anonClient.auth.signInWithPassword({
+    email: targetEmail,
+    password: rawPassword,
+  });
+
+  // If email confirmation is pending on Supabase project, auto-confirm and retry
+  if (authError && authError.message?.toLowerCase().includes("email not confirmed")) {
+    const userIdToConfirm =
+      candidateUserId ||
+      (await serverClient.from("profiles").select("id").eq("email", targetEmail).maybeSingle())?.data?.id;
+
+    if (userIdToConfirm) {
+      await serverClient.auth.admin.updateUserById(userIdToConfirm, { email_confirm: true });
+      const retry = await anonClient.auth.signInWithPassword({
+        email: targetEmail,
+        password: rawPassword,
+      });
+      authResult = retry.data;
+      authError = retry.error;
+    }
+  }
+
+  if (authError || !authResult?.session || !authResult?.user) {
+    throw new Error("Invalid confirmation number, email, or password.");
+  }
+
+  const userId = authResult.user.id;
+
+  // Reject administrator accounts attempting student login
+  const { data: profile } = await serverClient
+    .from("profiles")
+    .select("id, role, full_name, college, email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profile?.role === "admin") {
+    throw new Error("This is an administrator account. Please use the Admin Login tab.");
+  }
+
+  // Ensure profiles and students rows are synchronized
+  const displayName =
+    profile?.full_name ||
+    candidateName ||
+    (authResult.user.user_metadata?.["full_name"] as string | undefined) ||
+    (data.fullName as string | undefined) ||
+    targetEmail.split("@")[0];
+
+  const teamCode =
+    candidateTeamCode ||
+    (authResult.user.user_metadata?.["team_code"] as string | undefined) ||
+    (authResult.user.user_metadata?.["cnf_number"] as string | undefined) ||
+    (rawInput.includes("@") ? "EQX-STUDENT" : rawInput.toUpperCase());
+
+  if (!profile) {
+    await serverClient.from("profiles").upsert({
+      id: userId,
+      role: "student",
+      email: targetEmail,
+      full_name: displayName,
+    });
+  }
+
+  const { data: existingStudent } = await serverClient
+    .from("students")
+    .select("id, team_code, full_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!existingStudent) {
+    await serverClient.from("students").upsert({
+      user_id: userId,
+      full_name: displayName,
+      team_code: teamCode,
+      college: (authResult.user.user_metadata?.["college"] as string | undefined) || "MLR Institute of Technology",
+      mobile: (authResult.user.user_metadata?.["mobile"] as string | undefined) || "0000000000",
+    });
+  }
+
+  await resetDurableRateLimit(rateLimitKey);
+
+  return {
+    session: authResult.session,
+    user: {
+      ...authResult.user,
+      user_metadata: {
+        ...authResult.user.user_metadata,
+        role: "student",
+        full_name: displayName,
+        team_code: existingStudent?.team_code || teamCode,
       },
-    };
+    },
+  };
+}
+
+export const loginStudentServerFn = createServerFn({ method: "POST" })
+  .validator((data: StudentAuthPayload) => data)
+  .handler(async ({ data }) => {
+    return await loginStudentCore(data);
   });
 
 /**
  * Server function: Authenticates administrator accepting strictly username EQUINOXCIE.
  * Authenticates against Supabase Auth without hardcoding the password on client or server.
  */
-export const loginAdminServerFn = createServerFn({ method: "POST" })
-  .validator((data: AdminAuthPayload) => data)
-  .handler(async ({ data }) => {
-    // Strictly require SUPABASE_SERVICE_ROLE_KEY on the server
-    const serverClient = getServerSupabase();
+export async function loginAdminCore(data: AdminAuthPayload) {
+  // Strictly require SUPABASE_SERVICE_ROLE_KEY on the server
+  const serverClient = getServerSupabase();
 
     const normalizedUsername = data.username.trim().toUpperCase();
     const rateLimitKey = `admin:${normalizedUsername}`;
@@ -393,6 +447,12 @@ export const loginAdminServerFn = createServerFn({ method: "POST" })
       session: authData.session,
       user: authData.user,
     };
+}
+
+export const loginAdminServerFn = createServerFn({ method: "POST" })
+  .validator((data: AdminAuthPayload) => data)
+  .handler(async ({ data }) => {
+    return await loginAdminCore(data);
   });
 
 /**
@@ -400,10 +460,8 @@ export const loginAdminServerFn = createServerFn({ method: "POST" })
  * using the trusted server client. Rejects any client-side role inference from
  * localStorage, user metadata, or email suffixes.
  */
-export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POST" })
-  .validator((data: { userId: string }) => data)
-  .handler(async ({ data }) => {
-    if (!data.userId) return { role: null };
+export async function getAuthoritativeProfileRoleCore(data: { userId: string }) {
+  if (!data.userId) return { role: null };
     try {
       const serverClient = getServerSupabase();
       const { data: profile, error } = await serverClient
@@ -455,6 +513,12 @@ export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POS
     } catch {
       return { role: null };
     }
+}
+
+export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POST" })
+  .validator((data: { userId: string }) => data)
+  .handler(async ({ data }) => {
+    return await getAuthoritativeProfileRoleCore(data);
   });
 
 export interface StudentSubmitApplicationPayload {
@@ -801,52 +865,172 @@ export interface RegisterStudentPayload {
 }
 
 /**
- * Server function: Registers a student account with auto-confirmed email.
- * Students can register and sign in directly without email confirmation links.
+ * Authoritative core student registration handler.
+ * Creates an auto-confirmed Supabase Auth user, synchronizes profiles and students,
+ * removes any duplicate placeholder rows, and returns an authenticated session.
  */
-export const registerStudentServerFn = createServerFn({ method: "POST" })
-  .validator((data: RegisterStudentPayload) => data)
-  .handler(async ({ data }) => {
-    try {
-      const supabaseAdmin = getServerSupabase();
-      const cleanEmail = (data.email || "").trim().toLowerCase();
-      const cleanCnf = (data.cnfNumber || "").trim().toUpperCase();
-      const cleanName = (data.fullName || "").trim();
-      const cleanCollege = (data.college || "").trim();
-      const cleanMobile = (data.mobile || "").trim();
+export async function registerStudentCore(data: RegisterStudentPayload) {
+  try {
+    const supabaseAdmin = getServerSupabase();
+    const cleanEmail = (data.email || "").trim().toLowerCase();
+    const cleanCnf = (data.cnfNumber || "").trim().toUpperCase();
+    const cleanName = (data.fullName || "").trim();
+    const cleanCollege = (data.college || "").trim();
+    const cleanMobile = (data.mobile || "").trim();
 
-      if (!cleanEmail || !data.password || !cleanName || !cleanCnf) {
+    if (!cleanEmail || !data.password || !cleanName || !cleanCnf) {
+      return {
+        success: false,
+        error: "Full name, Confirmation Number (CNF), email, and password are required.",
+        user: null,
+        session: null,
+      };
+    }
+
+    if (data.password.length < 6) {
+      return {
+        success: false,
+        error: "Password must be at least 6 characters long.",
+        user: null,
+        session: null,
+      };
+    }
+
+    // MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
+    // Rule: Existing Website CNF + Official Excel CNF Match + Premium Pass = ALLOWED
+    const eligibility = verifyPassEligibility({
+      cnfNumber: cleanCnf,
+      email: cleanEmail,
+    });
+
+    if (!eligibility.allowed) {
+      return {
+        success: false,
+        error: eligibility.reason,
+        user: null,
+        session: null,
+      };
+    }
+
+    const officialTeamCode = cleanCnf;
+
+    let userId: string | null = null;
+    let authUser: any = null;
+
+    // Check existing auth users to handle pre-seeded or existing accounts cleanly
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    const existingUserByEmail = usersData?.users?.find(
+      (u) => u.email?.toLowerCase() === cleanEmail
+    );
+
+    const syntheticEmail = `${cleanCnf.toLowerCase()}@equinox.mlrit.ac.in`;
+    const altSyntheticEmail = `${cleanCnf.toLowerCase().replace(/[^a-z0-9]/g, "")}@equinox.mlrit.ac.in`;
+    const placeholderUser = usersData?.users?.find(
+      (u) =>
+        u.id !== existingUserByEmail?.id &&
+        (u.email?.toLowerCase() === syntheticEmail ||
+          u.email?.toLowerCase() === altSyntheticEmail ||
+          (u.user_metadata?.["team_code"] &&
+            u.user_metadata["team_code"].toString().toUpperCase() === cleanCnf &&
+            u.email?.endsWith("@equinox.mlrit.ac.in")))
+    );
+
+    if (existingUserByEmail) {
+      // User already exists with this email: update their password, ensure email_confirm: true, and update metadata
+      const { data: updated, error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUserByEmail.id,
+        {
+          password: data.password,
+          email_confirm: true,
+          user_metadata: {
+            role: "student",
+            full_name: cleanName,
+            college: cleanCollege,
+            team_code: officialTeamCode,
+            cnf_number: cleanCnf,
+            pass_category: "Premium Pass",
+            mobile: cleanMobile,
+            skills: data.skills || [],
+            graduation_year: data.graduationYear || null,
+          },
+        }
+      );
+
+      if (updateErr) {
         return {
           success: false,
-          error: "Full name, Confirmation Number (CNF), email, and password are required.",
+          error: updateErr.message || "Failed to update existing student credentials.",
           user: null,
           session: null,
         };
       }
 
-      // MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
-      // Rule: Existing Website CNF + Official Excel CNF Match + Premium Pass = ALLOWED
-      const eligibility = verifyPassEligibility({
-        cnfNumber: cleanCnf,
-        email: cleanEmail,
-      });
+      userId = updated?.user?.id || existingUserByEmail.id;
+      authUser = updated?.user || existingUserByEmail;
 
-      if (!eligibility.allowed) {
-        return {
-          success: false,
-          error: eligibility.reason,
-          user: null,
-          session: null,
-        };
+      // Clean up stale placeholder user if present
+      if (placeholderUser && placeholderUser.id !== userId) {
+        await supabaseAdmin.from("students").delete().eq("user_id", placeholderUser.id);
+        await supabaseAdmin.from("profiles").delete().eq("id", placeholderUser.id);
+        await supabaseAdmin.auth.admin.deleteUser(placeholderUser.id);
       }
+    } else if (placeholderUser) {
+      // Upgrade synthetic placeholder account to the student's real email, password, and confirmed status
+      const { data: upgraded, error: upgradeErr } = await supabaseAdmin.auth.admin.updateUserById(
+        placeholderUser.id,
+        {
+          email: cleanEmail,
+          password: data.password,
+          email_confirm: true,
+          user_metadata: {
+            role: "student",
+            full_name: cleanName,
+            college: cleanCollege,
+            team_code: officialTeamCode,
+            cnf_number: cleanCnf,
+            pass_category: "Premium Pass",
+            mobile: cleanMobile,
+            skills: data.skills || [],
+            graduation_year: data.graduationYear || null,
+          },
+        }
+      );
 
-      // Use verified CNF and associated official team code from Excel roster if available
-      const officialTeamCode = cleanCnf;
+      if (upgradeErr || !upgraded?.user) {
+        // Fallback: create fresh user
+        const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          password: data.password,
+          email_confirm: true,
+          user_metadata: {
+            role: "student",
+            full_name: cleanName,
+            college: cleanCollege,
+            team_code: officialTeamCode,
+            cnf_number: cleanCnf,
+            pass_category: "Premium Pass",
+            mobile: cleanMobile,
+            skills: data.skills || [],
+            graduation_year: data.graduationYear || null,
+          },
+        });
 
-      let userId: string | null = null;
-      let authUser: any = null;
-
-      // 1. Create user with email_confirm: true (direct registration without email verification)
+        if (createError || !createdUser?.user) {
+          return {
+            success: false,
+            error: createError?.message || "Registration failed. Please try again.",
+            user: null,
+            session: null,
+          };
+        }
+        userId = createdUser.user.id;
+        authUser = createdUser.user;
+      } else {
+        userId = upgraded.user.id;
+        authUser = upgraded.user;
+      }
+    } else {
+      // 1. Create fresh user with email_confirm: true (direct registration without email verification)
       const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: cleanEmail,
         password: data.password,
@@ -864,75 +1048,76 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         },
       });
 
-      if (createdUser?.user) {
-        userId = createdUser.user.id;
-        authUser = createdUser.user;
-      } else if (
-        createError &&
-        (createError.message.toLowerCase().includes("already registered") ||
-         createError.message.toLowerCase().includes("already been registered") ||
-         createError.message.toLowerCase().includes("already exists"))
-      ) {
-        // User already exists in auth: sync their password and metadata
-        const { data: existingProfile } = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .eq("email", cleanEmail)
-          .maybeSingle();
-
-        if (existingProfile?.id) {
-          userId = existingProfile.id;
-        } else {
-          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
-          const existing = usersData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
-          userId = existing?.id || null;
-        }
-
-        if (userId) {
-          await supabaseAdmin.auth.admin.updateUserById(userId, {
-            password: data.password,
-            user_metadata: {
-              role: "student",
-              full_name: cleanName,
-              college: cleanCollege,
-              team_code: officialTeamCode,
-              cnf_number: cleanCnf,
-              pass_category: "Premium Pass",
-              mobile: cleanMobile,
-              skills: data.skills || [],
-              graduation_year: data.graduationYear || null,
-            },
-          });
-        }
-      } else if (createError) {
+      if (createError || !createdUser?.user) {
         return {
           success: false,
-          error: createError.message || "Registration failed. Please try again.",
+          error: createError?.message || "Registration failed. Please try again.",
           user: null,
           session: null,
         };
       }
 
-      if (!userId) {
-        return {
-          success: false,
-          error: "Could not initialize student account.",
-          user: null,
-          session: null,
-        };
-      }
+      userId = createdUser.user.id;
+      authUser = createdUser.user;
+    }
 
-      // 2. Ensure profiles entry exists
-      await supabaseAdmin.from("profiles").upsert({
-        id: userId,
-        role: "student",
-        email: cleanEmail,
-        full_name: cleanName,
-        college: cleanCollege,
-      });
+    if (!userId) {
+      return {
+        success: false,
+        error: "Could not initialize student account.",
+        user: null,
+        session: null,
+      };
+    }
 
-      // 3. Ensure students entry exists
-      await supabaseAdmin.from("students").upsert({
+    // Clean up any other student row with this CNF to prevent duplicate team_code issues
+    await supabaseAdmin
+      .from("students")
+      .delete()
+      .ilike("team_code", officialTeamCode)
+      .neq("user_id", userId);
+
+    // 2. Ensure profiles entry exists
+    const { error: profileErr } = await supabaseAdmin.from("profiles").upsert({
+      id: userId,
+      role: "student",
+      email: cleanEmail,
+      full_name: cleanName,
+      college: cleanCollege,
+    });
+
+    if (profileErr) {
+      return {
+        success: false,
+        error: `Failed to create student profile: ${profileErr.message}`,
+        user: null,
+        session: null,
+      };
+    }
+
+    // 3. Ensure students entry exists
+    const { data: existingSt } = await supabaseAdmin
+      .from("students")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    let studentErr = null;
+    if (existingSt?.id) {
+      const { error: updErr } = await supabaseAdmin
+        .from("students")
+        .update({
+          full_name: cleanName,
+          college: cleanCollege,
+          team_code: officialTeamCode,
+          mobile: cleanMobile,
+          skills: data.skills || [],
+          graduation_year: data.graduationYear || null,
+        })
+        .eq("id", existingSt.id);
+      studentErr = updErr;
+    } else {
+      const { error: insErr } = await supabaseAdmin.from("students").insert({
         user_id: userId,
         full_name: cleanName,
         college: cleanCollege,
@@ -941,28 +1126,83 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         skills: data.skills || [],
         graduation_year: data.graduationYear || null,
       });
+      studentErr = insErr;
+    }
 
-      // 4. Authenticate directly to obtain an active session immediately
-      const { data: authData } = await getServerAnonClient().auth.signInWithPassword({
-        email: cleanEmail,
-        password: data.password,
-      });
-
-      return {
-        success: true,
-        error: null,
-        user: authData?.user || authUser || { id: userId, email: cleanEmail },
-        session: authData?.session || null,
-      };
-    } catch (err: any) {
-      console.warn("registerStudentServerFn error caught safely:", err);
+    if (studentErr) {
       return {
         success: false,
-        error: err?.message || "Registration server error. Please try again.",
+        error: `Failed to create student record: ${studentErr.message}`,
         user: null,
         session: null,
       };
     }
+
+    // 4. Verify both profile and student exist in DB
+    const { data: verifiedProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const { data: verifiedStudent } = await supabaseAdmin
+      .from("students")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!verifiedProfile || !verifiedStudent) {
+      return {
+        success: false,
+        error: "Database integrity verification failed during registration.",
+        user: null,
+        session: null,
+      };
+    }
+
+    // 5. Authenticate directly to obtain an active session immediately
+    const anonClient = getServerAnonClient();
+    let { data: authData, error: signInErr } = await anonClient.auth.signInWithPassword({
+      email: cleanEmail,
+      password: data.password,
+    });
+
+    // If auto-confirm is needed, force confirm and retry
+    if (signInErr && signInErr.message?.toLowerCase().includes("email not confirmed")) {
+      await supabaseAdmin.auth.admin.updateUserById(userId, { email_confirm: true });
+      const retry = await anonClient.auth.signInWithPassword({
+        email: cleanEmail,
+        password: data.password,
+      });
+      authData = retry.data;
+      signInErr = retry.error;
+    }
+
+    return {
+      success: true,
+      error: null,
+      user: authData?.user || authUser || { id: userId, email: cleanEmail },
+      session: authData?.session || null,
+    };
+  } catch (err: any) {
+    console.warn("registerStudentCore error caught safely:", err);
+    return {
+      success: false,
+      error: err?.message || "Registration server error. Please try again.",
+      user: null,
+      session: null,
+    };
+  }
+}
+
+/**
+ * Server function: Registers a student account with auto-confirmed email.
+ * Students can register and sign in directly without email confirmation links.
+ */
+export const registerStudentServerFn = createServerFn({ method: "POST" })
+  .validator((data: RegisterStudentPayload) => data)
+  .handler(async ({ data }) => {
+    return await registerStudentCore(data);
   });
 
 export interface AdminRolePayload {

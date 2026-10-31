@@ -2,9 +2,11 @@ import { supabase } from "./supabase";
 import { loginUser } from "./auth";
 import {
   loginStudentServerFn,
+  loginStudentCore,
   loginAdminServerFn,
   studentSubmitApplicationServerFn,
   registerStudentServerFn,
+  registerStudentCore,
   adminCreateOrUpdateRoleServerFn,
   adminDeleteRoleServerFn,
   adminGetRolesServerFn,
@@ -182,7 +184,6 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
   const cleanTeamCode = (input.team_code || cleanCnf).trim().toUpperCase();
 
   let serverResult: any = null;
-  let serverError: string | null = null;
 
   try {
     serverResult = await registerStudentServerFn({
@@ -200,137 +201,64 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
     });
 
     if (serverResult?.error) {
-      serverError = serverResult.error;
       throw new Error(serverResult.error);
     }
   } catch (err: any) {
+    // If it's an eligibility denial, validation error, or explicit rejection, re-throw immediately
     if (
       err?.message &&
       (err.message.includes("Denied") ||
        err.message.includes("required") ||
        err.message.includes("Restricted") ||
        err.message.includes("Password") ||
-       err.message.includes("eligible"))
+       err.message.includes("eligible") ||
+       err.message.includes("characters") ||
+       err.message.includes("Registered"))
     ) {
       throw err;
     }
-    console.warn("registerStudentServerFn error, attempting direct client fallback:", err);
-  }
 
-  // If server function succeeded and returned a session/user
-  if (serverResult?.success && serverResult?.user) {
-    if (serverResult.session) {
-      await supabase.auth.setSession({
-        access_token: serverResult.session.access_token,
-        refresh_token: serverResult.session.refresh_token,
-      });
-    }
-
-    loginUser({
-      id: serverResult.user.id,
-      role: "student",
-      name: cleanName,
-      teamCode: serverResult.user.user_metadata?.team_code || cleanCnf,
-      email: cleanEmail,
-    });
-
-    return { confirmationRequired: false, user: serverResult.user };
-  }
-
-  // Direct client Supabase fallback
-  try {
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    console.warn("registerStudentServerFn network/server error, executing robust service fallback:", err);
+    serverResult = await registerStudentCore({
       email: cleanEmail,
       password: input.password,
-      options: {
-        data: {
-          role: "student",
-          full_name: cleanName,
-          college: input.college.trim(),
-          team_code: cleanTeamCode,
-          mobile: input.mobile.trim(),
-        },
-      },
+      fullName: cleanName,
+      cnfNumber: cleanCnf,
+      college: cleanCollege,
+      mobile: cleanMobile,
+      teamCode: cleanTeamCode,
+      skills: input.skills ?? [],
+      graduationYear: input.graduation_year ?? null,
     });
 
-    let clientUser = signUpData?.user;
-    let clientSession = signUpData?.session;
-
-    if (
-      signUpError &&
-      (signUpError.message.toLowerCase().includes("already registered") ||
-       signUpError.message.toLowerCase().includes("already been registered") ||
-       signUpError.message.toLowerCase().includes("already exists"))
-    ) {
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: input.password,
-      });
-
-      if (signInError) {
-        throw new Error(serverError || "An account with this email is already registered. Please sign in with your password on the login page.");
-      }
-
-      clientUser = signInData.user;
-      clientSession = signInData.session;
-    } else if (signUpError) {
-      throw new Error(serverError || signUpError.message || "Registration failed. Please try again.");
+    if (serverResult?.error) {
+      throw new Error(serverResult.error);
     }
-
-    if (clientSession) {
-      await supabase.auth.setSession({
-        access_token: clientSession.access_token,
-        refresh_token: clientSession.refresh_token,
-      });
-    }
-
-    if (clientUser) {
-      try {
-        await supabase.from("profiles").upsert({
-          id: clientUser.id,
-          role: "student",
-          email: cleanEmail,
-          full_name: cleanName,
-          college: input.college.trim(),
-        });
-      } catch {}
-
-      try {
-        await supabase.from("students").upsert({
-          user_id: clientUser.id,
-          full_name: cleanName,
-          college: input.college.trim(),
-          team_code: cleanTeamCode,
-          mobile: input.mobile.trim(),
-        });
-      } catch {}
-
-      loginUser({
-        id: clientUser.id,
-        role: "student",
-        name: cleanName,
-        teamCode: cleanTeamCode,
-        email: cleanEmail,
-      });
-
-      return { confirmationRequired: false, user: clientUser };
-    }
-  } catch (clientErr: any) {
-    const errorMsg = clientErr?.message || serverError || "Registration failed. Please check your details and try again.";
-    throw new Error(errorMsg);
   }
 
-  if (serverError) {
-    throw new Error(serverError);
+  if (!serverResult?.success || !serverResult?.user) {
+    throw new Error(serverResult?.error || "Registration could not be completed. Please try again.");
   }
 
-  throw new Error("Could not complete registration. Please try logging in or try again.");
+  // Restore authenticated session in client Supabase instance
+  if (serverResult.session) {
+    await supabase.auth.setSession({
+      access_token: serverResult.session.access_token,
+      refresh_token: serverResult.session.refresh_token,
+    });
+  }
+
+  loginUser({
+    id: serverResult.user.id,
+    role: "student",
+    name: cleanName,
+    teamCode: serverResult.user.user_metadata?.team_code || cleanCnf,
+    email: cleanEmail,
+  });
+
+  return { confirmationRequired: false, user: serverResult.user };
 }
 
-/**
- * Student login using secure server-side authentication with rate limiting.
- * The student's email is NEVER exposed or returned to unauthenticated clients.
- */
 export async function loginStudent(credentials: {
   cnfNumber?: string;
   email?: string;
@@ -344,9 +272,10 @@ export async function loginStudent(credentials: {
   const fullName = (credentials.name || "").trim();
   const cleanPassword = credentials.password;
 
-  // Execute server-side authenticated flow supporting both CNF numbers and registered emails
+  let result: any = null;
+
   try {
-    const result = await loginStudentServerFn({
+    result = await loginStudentServerFn({
       data: {
         email: isEmail ? rawInput.toLowerCase() : undefined,
         cnfNumber,
@@ -355,102 +284,46 @@ export async function loginStudent(credentials: {
         password: cleanPassword,
       },
     });
-
-    if (result?.session) {
-      // Restore authenticated session in client Supabase instance
-      await supabase.auth.setSession({
-        access_token: result.session.access_token,
-        refresh_token: result.session.refresh_token,
-      });
-
-      // Fetch student details for local store
-      const { data: student } = await supabase
-        .from("students")
-        .select("full_name, team_code")
-        .eq("user_id", result.user.id)
-        .maybeSingle();
-
-      const meta = result.user.user_metadata;
-      loginUser({
-        id: result.user.id,
-        role: "student",
-        name: student?.full_name || (meta?.["full_name"] as string | undefined) || fullName || rawInput,
-        teamCode: student?.team_code || (meta?.["team_code"] as string | undefined) || rawInput,
-        email: result.user.email ?? undefined,
-      });
-
-      return result;
-    }
   } catch (err: any) {
-    console.warn("loginStudentServerFn encountered error, attempting direct client fallback:", err);
-  }
-
-  // Direct client Supabase fallback
-  const cleanCnf = cnfNumber.replace(/-/g, "").toLowerCase();
-  const emailsToTry: string[] = [];
-
-  if (rawInput.includes("@")) {
-    emailsToTry.push(rawInput.toLowerCase());
-  }
-  emailsToTry.push(`${cleanCnf}@equinox.mlrit.ac.in`);
-  emailsToTry.push(`${cnfNumber.toLowerCase()}@equinox.mlrit.ac.in`);
-
-  // Also check if there is an existing student registered with this team code or cnf number
-  try {
-    const { data: st } = await supabase
-      .from("students")
-      .select("user_id, team_code")
-      .ilike("team_code", rawInput)
-      .maybeSingle();
-
-    if (st?.user_id) {
-      const { data: pr } = await supabase
-        .from("profiles")
-        .select("email")
-        .eq("id", st.user_id)
-        .maybeSingle();
-
-      if (pr?.email && !emailsToTry.includes(pr.email.toLowerCase())) {
-        emailsToTry.unshift(pr.email.toLowerCase());
-      }
+    // If it's an invalid credential, unregistered student error, or admin rejection, re-throw immediately
+    if (
+      err?.message &&
+      (err.message.includes("Invalid") ||
+       err.message.includes("not registered") ||
+       err.message.includes("administrator") ||
+       err.message.includes("Too many") ||
+       err.message.includes("wait"))
+    ) {
+      throw err;
     }
-  } catch {
-    // Ignore lookup errors
-  }
 
-  let authData: any = null;
-  for (const email of emailsToTry) {
-    const res = await supabase.auth.signInWithPassword({
-      email,
+    console.warn("loginStudentServerFn encountered network/server error, executing fallback:", err);
+    result = await loginStudentCore({
+      email: isEmail ? rawInput.toLowerCase() : undefined,
+      cnfNumber,
+      fullName,
+      teamCode: cnfNumber,
       password: cleanPassword,
     });
-    if (res.data?.session) {
-      authData = res.data;
-      break;
-    }
   }
 
-  if (authData?.session && authData?.user) {
+  if (result?.session && result?.user) {
+    // Restore authenticated session in client Supabase instance
     await supabase.auth.setSession({
-      access_token: authData.session.access_token,
-      refresh_token: authData.session.refresh_token,
+      access_token: result.session.access_token,
+      refresh_token: result.session.refresh_token,
     });
 
-    const { data: student } = await supabase
-      .from("students")
-      .select("full_name, team_code")
-      .eq("user_id", authData.user.id)
-      .maybeSingle();
-
+    const meta = result.user.user_metadata;
     loginUser({
-      id: authData.user.id,
+      id: result.user.id,
       role: "student",
-      name: student?.full_name || (authData.user.user_metadata?.["full_name"] as string | undefined) || fullName || rawInput,
-      teamCode: student?.team_code || (authData.user.user_metadata?.["team_code"] as string | undefined) || rawInput,
-      email: authData.user.email ?? undefined,
+      name: (meta?.["full_name"] as string | undefined) || fullName || rawInput,
+      teamCode: (meta?.["team_code"] as string | undefined) || (meta?.["cnf_number"] as string | undefined) || cnfNumber,
+      email: result.user.email ?? undefined,
     });
 
-    return { session: authData.session, user: authData.user };
+    return result;
   }
 
   throw new Error("Student authentication failed. Please check your Confirmation Number / Email and Password.");
