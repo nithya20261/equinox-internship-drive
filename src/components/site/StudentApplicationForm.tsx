@@ -166,9 +166,10 @@ export function StudentApplicationForm({
         errors.resumeFile = "Resume file size must be less than 10MB.";
       } else {
         // Enforce CNFNUMBER_NAME naming format
-        const cleanCnf = (user?.teamCode || "").replace(/[^A-Za-z0-9]/g, "");
-        const upperName = resumeFile.name.toUpperCase();
-        if (cleanCnf && !upperName.includes(cleanCnf)) {
+        // Compare alphanumerics only, so "CNF-22033C", "CNF22033C" and "cnf_22033c" all match.
+        const alnumUpper = (s: string) => s.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        const cleanCnf = alnumUpper(user?.teamCode || "");
+        if (cleanCnf && !alnumUpper(resumeFile.name).includes(cleanCnf)) {
           const expectedFormat = `${user?.teamCode || "CNFNUMBER"}_${(fullName.trim() || user?.fullName || "YOURNAME").replace(/\s+/g, "_")}.pdf`;
           errors.resumeFile = `Resume filename must follow the required format: ${expectedFormat}. Please rename your file before uploading.`;
         }
