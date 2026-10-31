@@ -2,11 +2,9 @@ import { supabase } from "./supabase";
 import { loginUser } from "./auth";
 import {
   loginStudentServerFn,
-  loginStudentCore,
   loginAdminServerFn,
   studentSubmitApplicationServerFn,
   registerStudentServerFn,
-  registerStudentCore,
   adminCreateOrUpdateRoleServerFn,
   adminDeleteRoleServerFn,
   adminGetRolesServerFn,
@@ -218,22 +216,8 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
       throw err;
     }
 
-    console.warn("registerStudentServerFn network/server error, executing robust service fallback:", err);
-    serverResult = await registerStudentCore({
-      email: cleanEmail,
-      password: input.password,
-      fullName: cleanName,
-      cnfNumber: cleanCnf,
-      college: cleanCollege,
-      mobile: cleanMobile,
-      teamCode: cleanTeamCode,
-      skills: input.skills ?? [],
-      graduationYear: input.graduation_year ?? null,
-    });
-
-    if (serverResult?.error) {
-      throw new Error(serverResult.error);
-    }
+    console.error("registerStudentServerFn failed:", err);
+    throw new Error("Registration service is unavailable. Please try again shortly.");
   }
 
   if (!serverResult?.success || !serverResult?.user) {
@@ -290,6 +274,7 @@ export async function loginStudent(credentials: {
       err?.message &&
       (err.message.includes("Invalid") ||
        err.message.includes("not registered") ||
+       err.message.includes("registration") ||
        err.message.includes("administrator") ||
        err.message.includes("Too many") ||
        err.message.includes("wait"))
@@ -297,14 +282,8 @@ export async function loginStudent(credentials: {
       throw err;
     }
 
-    console.warn("loginStudentServerFn encountered network/server error, executing fallback:", err);
-    result = await loginStudentCore({
-      email: isEmail ? rawInput.toLowerCase() : undefined,
-      cnfNumber,
-      fullName,
-      teamCode: cnfNumber,
-      password: cleanPassword,
-    });
+    console.error("loginStudentServerFn failed:", err);
+    throw new Error("Login service is unavailable. Please try again shortly.");
   }
 
   if (result?.session && result?.user) {
