@@ -245,3 +245,4 @@ describe("Complete Application Form → Supabase Database Integration", () => {
     });
   });
 });
+

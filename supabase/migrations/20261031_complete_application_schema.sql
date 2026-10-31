@@ -108,3 +108,4 @@ CREATE INDEX IF NOT EXISTS idx_applications_created_at ON public.applications (c
 
 -- 3. Grant table permissions
 GRANT SELECT, INSERT, UPDATE ON public.applications TO authenticated, service_role;
+
