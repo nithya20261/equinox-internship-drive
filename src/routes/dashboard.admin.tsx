@@ -35,7 +35,6 @@ import {
   adminGetResumeDownloadUrl,
   adminExportApplicationsCsv,
 } from "@/lib/api";
-import { CONFIRMED_STUDENTS_LIST } from "@/data/confirmed-students";
 import { INTERNSHIP_CATEGORIES } from "@/data/site";
 
 export const Route = createFileRoute("/dashboard/admin")({
@@ -476,18 +475,6 @@ function AdminConsole() {
       isCustom: true,
       resumeUrl: s.resume_url,
     });
-  });
-
-  // Add static 202 if not already in DB
-  CONFIRMED_STUDENTS_LIST.forEach((s) => {
-    if (!dbCnfMap.has(s.cnf.toUpperCase())) {
-      combinedStudentsList.push({
-        cnf: s.cnf,
-        name: s.name,
-        college: "MLR Institute of Technology",
-        isCustom: false,
-      });
-    }
   });
 
   const filteredStudents = combinedStudentsList.filter((s) => {

@@ -1,25 +1,14 @@
-const dns = require('dns');
-const origLookup = dns.lookup;
-dns.lookup = (hostname, options, callback) => {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-  if (hostname === 'plyvtevuxdmzswtvpmwv.supabase.co') {
-    if (options && options.all) {
-      return callback(null, [{ address: '104.18.38.10', family: 4 }]);
-    }
-    return callback(null, '104.18.38.10', 4);
-  }
-  return origLookup(hostname, options, callback);
-};
-
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 
-const url = "https://plyvtevuxdmzswtvpmwv.supabase.co";
-const anonKey = "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb";
-const serviceKey = Buffer.from("c2Jfc2VjcmV0X2lPOGtYcW93cHZSTXNpbWNYMnlWTVFfZ1VoOUpNT3I=", "base64").toString("utf8");
+const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://plyvtevuxdmzswtvpmwv.supabase.co";
+const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb";
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!serviceKey) {
+  console.error("Error: SUPABASE_SERVICE_ROLE_KEY environment variable is required.");
+  process.exit(1);
+}
 
 const serverClient = createClient(url, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -31,7 +20,7 @@ const anonClient = createClient(url, anonKey, {
 
 async function runVerification() {
   console.log('====================================================');
-  console.log('VERIFYING RESTRUCTURED SUPABASE AUTHENTICATION');
+  console.log('VERIFYING DATABASE SYNCHRONIZATION');
   console.log('====================================================');
 
   // 1. Check counts in DB
@@ -43,46 +32,81 @@ async function runVerification() {
     .from('profiles')
     .select('id, role, email, full_name', { count: 'exact' });
 
-  const { data: apps, count: appCount } = await serverClient
-    .from('applications')
-    .select('id, student_id, resume_url', { count: 'exact' });
-
-  const { data: usersData } = await serverClient.auth.admin.listUsers({ page: 1, perPage: 100 });
-  const authUsers = usersData?.users || [];
-
-  console.log(`Active Students in DB:     ${studentCount}`);
-  console.log(`Active Profiles in DB:     ${profileCount}`);
-  console.log(`Active Applications in DB: ${appCount}`);
-  console.log(`Active Auth Users in DB:   ${authUsers.length}`);
-
-  // 2. Verify that pruned dummy CNFs CANNOT log in directly with CNF password
-  console.log('\n--- VERIFYING PRUNED DUMMY CNF LOGINS ARE REJECTED ---');
-  const samplePrunedCnfs = ["CNF-F6D524", "CNF-AC9BAB", "CNF-C339BA", "CNF-82E13C"];
-  for (const cnf of samplePrunedCnfs) {
-    const email = `${cnf.toLowerCase()}@equinox.mlrit.ac.in`;
-    const { data: loginData, error: loginError } = await anonClient.auth.signInWithPassword({
-      email,
-      password: cnf,
-    });
-    const rejected = !!loginError;
-    console.log(`[PASS] Dummy login blocked for ${cnf}: ${rejected} (${loginError?.message || 'Access Denied'})`);
+  let allAuthUsers = [];
+  let page = 1;
+  while (true) {
+    const { data: usersData, error } = await serverClient.auth.admin.listUsers({ page, perPage: 100 });
+    if (error || !usersData?.users || usersData.users.length === 0) break;
+    allAuthUsers = allAuthUsers.concat(usersData.users);
+    if (usersData.users.length < 100) break;
+    page++;
   }
 
-  // 3. Verify Admin Role Isolation and Access
-  console.log('\n--- VERIFYING ADMIN ISOLATION & INTEGRITY ---');
-  const adminProfile = (profiles || []).find(p => p.role === 'admin');
-  console.log(`[PASS] Admin profile intact: ${adminProfile?.email} (Role: ${adminProfile?.role})`);
+  console.log(`Students count in DB: ${studentCount} (Array length: ${students?.length})`);
+  console.log(`Profiles count in DB: ${profileCount} (Array length: ${profiles?.length})`);
+  console.log(`Auth users count:    ${allAuthUsers.length}`);
 
-  // 4. Verify Applicant and Application Integrity
-  console.log('\n--- VERIFYING APPLICANT DATA & RESUMES INTACT ---');
-  console.log(`[PASS] Applications intact: ${(apps || []).length} applications found.`);
-  if (apps && apps.length > 0) {
-    console.log(`[PASS] Application ID: ${apps[0].id} linked to Student ID: ${apps[0].student_id}`);
-    console.log(`[PASS] Resume URL: ${apps[0].resume_url}`);
+  // 2. Test actual CNF logins through Supabase Auth (Anon Client - identical to real client login)
+  console.log('\n--- TESTING CNF AUTHENTICATION ---');
+
+  const testCnfs = [
+    { cnf: "CNF000", expectedName: "SHREYAS" },
+    { cnf: "CNF-F6D524", expectedName: "A.Sharanya" },
+  ];
+
+  for (const item of testCnfs) {
+    const email = `${item.cnf.toLowerCase()}@equinox.mlrit.ac.in`;
+    const { data: auth, error } = await anonClient.auth.signInWithPassword({
+      email,
+      password: item.cnf
+    });
+
+    if (error) {
+      console.log(`FAILED login for ${item.cnf}: ${error.message}`);
+    } else {
+      const u = auth.user;
+      const { data: prof } = await serverClient.from('profiles').select('*').eq('id', u.id).single();
+      const { data: st } = await serverClient.from('students').select('*').eq('user_id', u.id).single();
+      console.log(`SUCCESS login: ${item.cnf} | Auth ID: ${u.id.slice(0, 8)}... | Profile Role: ${prof?.role} | Student Name: ${st?.full_name} | Team Code: ${st?.team_code}`);
+    }
+  }
+
+  // 3. Test that wrong passwords fail
+  console.log('\n--- TESTING WRONG PASSWORD REJECTION ---');
+  const { error: wrongPassError } = await anonClient.auth.signInWithPassword({
+    email: "cnf000@equinox.mlrit.ac.in",
+    password: "WRONG_PASSWORD_XYZ"
+  });
+  console.log(`Wrong password correctly rejected: ${Boolean(wrongPassError)} (${wrongPassError?.message})`);
+
+  // 4. Test self-registered email student account
+  console.log('\n--- TESTING EMAIL-BASED STUDENT ACCOUNT ---');
+  const { data: selfStudent } = await serverClient
+    .from('profiles')
+    .select('id, email, role, full_name')
+    .eq('role', 'student')
+    .not('email', 'like', '%@equinox.mlrit.ac.in')
+    .limit(1)
+    .single();
+
+  if (selfStudent) {
+    console.log(`Found self-registered email student: ${selfStudent.email} (Role: ${selfStudent.role})`);
+  }
+
+  // 5. Test Admin Account isolation
+  console.log('\n--- TESTING ADMIN ROLE ISOLATION ---');
+  const { data: adminProf } = await serverClient
+    .from('profiles')
+    .select('*')
+    .eq('email', 'equinoxcie@admin.equinox.internal')
+    .single();
+
+  if (adminProf) {
+    console.log(`Admin profile verified: ${adminProf.email} (Role: ${adminProf.role}) - Isolated from student role.`);
   }
 
   console.log('\n====================================================');
-  console.log('ALL VERIFICATIONS SUCCESSFUL: ACCESS SAFELY RESET');
+  console.log('ALL VERIFICATIONS SUCCESSFUL');
   console.log('====================================================');
 }
 

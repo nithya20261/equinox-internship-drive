@@ -98,7 +98,7 @@ export function useAuth() {
           branch: res.branch ?? undefined,
           mobile: res.mobile ?? undefined,
           teamCode: res.teamCode ?? undefined,
-          registrationCompleted: res.registrationCompleted ?? false,
+          registrationCompleted: (res as any).registrationCompleted ?? true,
         };
 
         loginUser(authUser);
@@ -153,7 +153,7 @@ export function useAuth() {
             branch: res.branch ?? undefined,
             mobile: res.mobile ?? undefined,
             teamCode: res.teamCode ?? undefined,
-          registrationCompleted: res.registrationCompleted ?? false,
+          registrationCompleted: (res as any).registrationCompleted ?? true,
           };
 
           loginUser(authUser);

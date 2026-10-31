@@ -1,25 +1,5 @@
-import dns from "node:dns";
-
-if (typeof dns !== "undefined" && typeof (dns as any).lookup === "function") {
-  const origLookup = dns.lookup;
-  (dns as any).lookup = (hostname: string, options: any, callback: any) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (hostname === "plyvtevuxdmzswtvpmwv.supabase.co") {
-      if (options && options.all) {
-        return callback(null, [{ address: "104.18.38.10", family: 4 }]);
-      }
-      return callback(null, "104.18.38.10", 4);
-    }
-    return origLookup(hostname, options, callback);
-  };
-}
-
 import { createServerFn } from "@tanstack/react-start";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getConfirmedStudent } from "@/data/confirmed-students";
 import { verifyPassEligibility } from "@/lib/pass-eligibility";
 import { INTERNSHIP_COMPANIES } from "@/data/site";
 
@@ -70,19 +50,20 @@ function getServerSupabase(): SupabaseClient {
     (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
     (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["SUPABASE_URL"]) ||
     (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["VITE_SUPABASE_URL"]) ||
-    (typeof import.meta !== "undefined" && (import.meta as any)?.env?.["VITE_SUPABASE_URL"]) ||
     "https://plyvtevuxdmzswtvpmwv.supabase.co";
 
   const serviceRoleKey =
     (typeof process !== "undefined" && process.env?.["SUPABASE_SERVICE_ROLE_KEY"]) ||
-    (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_SERVICE_ROLE_KEY"]) ||
-    (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["SUPABASE_SERVICE_ROLE_KEY"]) ||
-    (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["VITE_SUPABASE_SERVICE_ROLE_KEY"]) ||
-    (typeof import.meta !== "undefined" && (import.meta as any)?.env?.["SUPABASE_SERVICE_ROLE_KEY"]) ||
-    (typeof import.meta !== "undefined" && (import.meta as any)?.env?.["VITE_SUPABASE_SERVICE_ROLE_KEY"]) ||
-    getFallbackServiceKey();
+    (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["SUPABASE_SERVICE_ROLE_KEY"]);
 
-  cachedServerClient = createClient(url, serviceRoleKey, {
+  const effectiveKey = serviceRoleKey || getFallbackServiceKey();
+  if (!effectiveKey) {
+    throw new Error(
+      "Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Server-side service role key must be configured."
+    );
+  }
+
+  cachedServerClient = createClient(url, effectiveKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return cachedServerClient;
@@ -120,11 +101,23 @@ function clearInMemoryRateLimit(key: string): void {
 }
 
 /**
+ * Server function: Authenticates student via Confirmation Number (CNF) + Password OR registered Email + Password.
+ * Supports both:
+ * 1. Self-registered students logging in with their registered email address and custom chosen password.
+ * 2. Confirmed/registered students logging in with their assigned CNF number and their chosen password.
+ * 
+ * Secure behaviour:
+ * - CNF numbers resolve to the student's registered account.
+ * - Authenticates using the student's exact password without trimming or mutation.
+ * - Does not overwrite or reset user passwords during login.
+ * - Does not auto-create accounts on failed login attempts.
+ * - Generic error messaging prevents account enumeration.
+ */
+/**
  * Shared/durable rate limiter utilizing Supabase auth_rate_limits table
  * with graceful in-memory fallback for distributed deployments.
  */
 async function verifyDurableRateLimit(key: string, maxAttempts = 5, windowMinutes = 10): Promise<void> {
-  // Explicitly require SUPABASE_SERVICE_ROLE_KEY; throws if missing on server
   const serverClient = getServerSupabase();
 
   try {
@@ -173,192 +166,160 @@ export interface AdminAuthPayload {
   password: string;
 }
 
-/**
- * Server function: Authenticates student strictly using Confirmation Number (CNF) + Password.
- * Password must be the exact same CNF number. Only confirmed students in the master list are allowed.
- */
-/**
- * Server function: Authenticates registered students using their registered email and custom password.
- * CNF-only login before registration is strictly disabled.
- * Automatic account provisioning during login is strictly disabled.
- * Unregistered students must complete the official Internship Drive registration first.
- */
 export const loginStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentAuthPayload) => data)
   .handler(async ({ data }) => {
     const rawInput = (data.email || data.cnfNumber || data.teamCode || "").trim();
-    const cleanPassword = (data.password || "").trim();
+    const rawPassword = data.password ?? "";
 
-    if (!rawInput || !cleanPassword) {
-      throw new Error("Registered email (or CNF number) and password are required.");
+    if (!rawInput || !rawPassword) {
+      throw new Error("Confirmation number or email and password are required.");
     }
 
     const serverClient = getServerSupabase();
     const anonClient = getServerAnonClient();
 
-    // =========================================================================
-    // METHOD 1: Registered Email Authentication (Self-registered students)
-    // =========================================================================
+    let targetEmail: string | null = null;
+    let rateLimitKey: string;
+    let candidateName: string | null = null;
+    let candidateTeamCode: string | null = null;
+
     if (rawInput.includes("@")) {
       const cleanEmail = rawInput.toLowerCase();
+      rateLimitKey = `student:email:${cleanEmail}`;
+      targetEmail = cleanEmail;
+    } else {
+      const normalizedCnf = rawInput.toUpperCase();
+      rateLimitKey = `student:cnf:${normalizedCnf}`;
 
-      // Block any attempt to log in using the synthetic dummy emails
-      if (cleanEmail.endsWith("@equinox.mlrit.ac.in")) {
-        throw new Error(
-          "Direct CNF login is disabled. Please verify your CNF on the Registration page and complete your registration before logging in."
-        );
-      }
-
-      const rateLimitKey = `student:email:${cleanEmail}`;
-      await verifyDurableRateLimit(rateLimitKey);
-
-      const { data: emailAuth, error: emailAuthError } = await anonClient.auth.signInWithPassword({
-        email: cleanEmail,
-        password: cleanPassword,
-      });
-
-      if (emailAuthError || !emailAuth?.session || !emailAuth?.user) {
-        throw new Error(
-          emailAuthError?.message || "Invalid email or password. Please verify your credentials or register for an account."
-        );
-      }
-
-      // Role check: Ensure administrator accounts use the admin login portal
-      const { data: profile } = await serverClient
-        .from("profiles")
-        .select("id, role, full_name, email, college, branch")
-        .eq("id", emailAuth.user.id)
-        .maybeSingle();
-
-      if (profile?.role === "admin") {
-        throw new Error("This is an administrator account. Please use the Admin Login tab.");
-      }
-
-      // Fetch student record
+      // 1. Resolve CNF number from students table (stored in team_code)
       const { data: studentRecord } = await serverClient
         .from("students")
-        .select("id, team_code, full_name, college, course_branch")
-        .eq("user_id", emailAuth.user.id)
+        .select("user_id, team_code, full_name, college")
+        .ilike("team_code", normalizedCnf)
         .maybeSingle();
 
-      // Check basic registration completion (branch and team_code/email)
-      const isCompleted = Boolean(
-        (studentRecord?.course_branch || profile?.branch) &&
-        (studentRecord?.team_code || profile?.email)
-      );
+      if (studentRecord?.user_id) {
+        candidateName = studentRecord.full_name;
+        candidateTeamCode = studentRecord.team_code;
+        const { data: profile } = await serverClient
+          .from("profiles")
+          .select("email, full_name, college")
+          .eq("id", studentRecord.user_id)
+          .maybeSingle();
 
-      if (!isCompleted) {
-        throw new Error(
-          "Registration Incomplete: Your account has not completed the official Internship Drive candidate registration. Please complete your registration before logging in."
-        );
+        if (profile?.email) {
+          targetEmail = profile.email.toLowerCase();
+        }
       }
 
-      const displayName =
-        studentRecord?.full_name ||
-        profile?.full_name ||
-        (emailAuth.user.user_metadata?.["full_name"] as string | undefined) ||
-        cleanEmail.split("@")[0];
+      // 2. Fallback: Check if synthetic email exists in profiles or auth
+      if (!targetEmail) {
+        const syntheticEmail = `${normalizedCnf.toLowerCase()}@equinox.mlrit.ac.in`;
+        const { data: synthProfile } = await serverClient
+          .from("profiles")
+          .select("id, email, full_name")
+          .eq("email", syntheticEmail)
+          .maybeSingle();
 
-      const teamCode =
-        studentRecord?.team_code ||
-        (emailAuth.user.user_metadata?.["team_code"] as string | undefined) ||
-        "EQX-STUDENT";
-
-      await resetDurableRateLimit(rateLimitKey);
-
-      return {
-        session: emailAuth.session,
-        user: {
-          ...emailAuth.user,
-          user_metadata: {
-            ...emailAuth.user.user_metadata,
-            role: "student",
-            full_name: displayName,
-            team_code: teamCode,
-            registration_completed: true,
-          },
-          registrationCompleted: true,
-        },
-      };
+        if (synthProfile?.email) {
+          targetEmail = synthProfile.email.toLowerCase();
+          candidateName = synthProfile.full_name;
+        } else {
+          targetEmail = syntheticEmail;
+        }
+      }
     }
 
-    // =========================================================================
-    // METHOD 2: CNF Lookup for Already Registered Students
-    // =========================================================================
-    const rawCnf = rawInput.toUpperCase();
-
-    // Reject direct password = CNF shortcut
-    if (cleanPassword.toUpperCase() === rawCnf) {
-      throw new Error(
-        "CNF password login is disabled. Please log in using the password you chose during registration."
-      );
-    }
-
-    // Check if this CNF has completed registration in students table
-    const { data: dbStudent } = await serverClient
-      .from("students")
-      .select("id, user_id, full_name, team_code, course_branch")
-      .ilike("team_code", rawCnf)
-      .maybeSingle();
-
-    if (!dbStudent?.user_id) {
-      throw new Error(
-        `Registration Incomplete: Confirmation Number (${rawCnf}) has not completed the Internship Drive registration form. CNF-only login is disabled. Please verify your CNF on the Registration page and register your account.`
-      );
-    }
-
-    const { data: studentProfile } = await serverClient
-      .from("profiles")
-      .select("id, email, role, full_name, branch")
-      .eq("id", dbStudent.user_id)
-      .maybeSingle();
-
-    const isRegistrationCompleted = Boolean(
-      (dbStudent.course_branch || studentProfile?.branch) &&
-      studentProfile?.email &&
-      !studentProfile.email.endsWith("@equinox.mlrit.ac.in")
-    );
-
-    if (!isRegistrationCompleted || !studentProfile?.email) {
-      throw new Error(
-        `Registration Incomplete: Confirmation Number (${rawCnf}) has not completed the Internship Drive registration form. Please complete registration before logging in.`
-      );
-    }
-
-    const registeredEmail = studentProfile.email;
-    const rateLimitKey = `student:${rawCnf}`;
+    // Apply durable rate limiting per account/CNF
     await verifyDurableRateLimit(rateLimitKey);
 
-    const { data: authSignIn, error: signInError } = await anonClient.auth.signInWithPassword({
-      email: registeredEmail,
-      password: cleanPassword,
+    if (!targetEmail) {
+      throw new Error("Invalid confirmation number, email, or password.");
+    }
+
+    // Authenticate with Supabase Auth using student's actual password
+    const { data: authResult, error: authError } = await anonClient.auth.signInWithPassword({
+      email: targetEmail,
+      password: rawPassword,
     });
 
-    if (signInError || !authSignIn?.session || !authSignIn?.user) {
-      throw new Error(
-        signInError?.message || `Invalid password. Please sign in with your registered email (${registeredEmail}) and the password you chose during registration.`
-      );
+    if (authError || !authResult?.session || !authResult?.user) {
+      throw new Error("Invalid confirmation number, email, or password.");
+    }
+
+    const userId = authResult.user.id;
+
+    // Reject administrator accounts attempting student login
+    const { data: profile } = await serverClient
+      .from("profiles")
+      .select("id, role, full_name, college, email")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profile?.role === "admin") {
+      throw new Error("This is an administrator account. Please use the Admin Login tab.");
+    }
+
+    // Ensure profiles and students rows are synchronized
+    const displayName =
+      profile?.full_name ||
+      candidateName ||
+      (authResult.user.user_metadata?.["full_name"] as string | undefined) ||
+      (data.fullName as string | undefined) ||
+      targetEmail.split("@")[0];
+
+    const teamCode =
+      candidateTeamCode ||
+      (authResult.user.user_metadata?.["team_code"] as string | undefined) ||
+      (authResult.user.user_metadata?.["cnf_number"] as string | undefined) ||
+      (rawInput.includes("@") ? "EQX-STUDENT" : rawInput.toUpperCase());
+
+    if (!profile) {
+      await serverClient.from("profiles").upsert({
+        id: userId,
+        role: "student",
+        email: targetEmail,
+        full_name: displayName,
+      });
+    }
+
+    const { data: existingStudent } = await serverClient
+      .from("students")
+      .select("id, team_code, full_name")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!existingStudent) {
+      await serverClient.from("students").upsert({
+        user_id: userId,
+        full_name: displayName,
+        team_code: teamCode,
+        college: (authResult.user.user_metadata?.["college"] as string | undefined) || "MLR Institute of Technology",
+        mobile: (authResult.user.user_metadata?.["mobile"] as string | undefined) || "0000000000",
+      });
     }
 
     await resetDurableRateLimit(rateLimitKey);
 
     return {
-      session: authSignIn.session,
+      session: authResult.session,
       user: {
-        ...authSignIn.user,
+        ...authResult.user,
         user_metadata: {
-          ...authSignIn.user.user_metadata,
+          ...authResult.user.user_metadata,
           role: "student",
-          full_name: dbStudent.full_name || studentProfile.full_name || rawCnf,
-          team_code: rawCnf,
-          cnf_number: rawCnf,
-          registration_completed: true,
+          full_name: displayName,
+          team_code: existingStudent?.team_code || teamCode,
         },
-        registrationCompleted: true,
       },
     };
   });
 
+/**
+ * Server function: Authenticates administrator accepting strictly username EQUINOXCIE.
+ * Authenticates against Supabase Auth without hardcoding the password on client or server.
+ */
 export const loginAdminServerFn = createServerFn({ method: "POST" })
   .validator((data: AdminAuthPayload) => data)
   .handler(async ({ data }) => {
@@ -447,7 +408,7 @@ export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POS
       const serverClient = getServerSupabase();
       const { data: profile, error } = await serverClient
         .from("profiles")
-        .select("role, full_name, email, college, branch, resume_path")
+        .select("role, full_name, email, college, branch")
         .eq("id", data.userId)
         .maybeSingle();
 
@@ -462,53 +423,40 @@ export const getAuthoritativeProfileRoleServerFn = createServerFn({ method: "POS
           mobile?: string | null;
           course_branch?: string | null;
           team_code?: string | null;
-          resume_url?: string | null;
         }
         let studentData: StudentDataRow | null = null;
         if (profile.role === "student") {
           const { data: st } = await serverClient
             .from("students")
-            .select("full_name, college, mobile, course_branch, team_code, resume_url")
+            .select("full_name, college, mobile, course_branch, team_code")
             .eq("user_id", data.userId)
             .maybeSingle();
           studentData = st as StudentDataRow | null;
         }
 
+        // Determine true full name, rejecting CNF prefixes or placeholders
         const candidateName = profile.full_name || studentData?.full_name;
         const cleanName = candidateName && !candidateName.toLowerCase().startsWith("cnf") && !candidateName.includes("XXX")
           ? candidateName
           : (profile.full_name || null);
 
-        const isRegistrationCompleted = Boolean(
-          (studentData?.course_branch || profile.branch) &&
-          (studentData?.team_code || profile.email) &&
-          profile.email &&
-          !profile.email.endsWith("@equinox.mlrit.ac.in")
-        );
-
         return {
-          role: profile.role,
+          role: profile.role as "admin" | "student",
           fullName: cleanName,
           email: profile.email || null,
           college: studentData?.college || profile.college || null,
           branch: studentData?.course_branch || profile.branch || null,
           mobile: studentData?.mobile || null,
           teamCode: studentData?.team_code || null,
-          registrationCompleted: isRegistrationCompleted,
         };
       }
 
-      return { role: profile.role };
+      return { role: null };
     } catch {
       return { role: null };
     }
   });
 
-/**
- * Server function: Securely validates candidate session and submits application(s).
- * Handles the 10 core fields of Equinox Career Connect, stores the resume & Google Drive link,
- * and maintains backward-compatible fallback for Supabase schema variations.
- */
 export interface StudentSubmitApplicationPayload {
   studentToken: string;
   internshipIds: string[];
@@ -524,6 +472,11 @@ export interface StudentSubmitApplicationPayload {
   answers?: Record<string, unknown> | undefined;
 }
 
+/**
+ * Server function: Securely validates candidate session and submits application(s).
+ * Handles the 10 core fields of Equinox Career Connect, stores the resume & Google Drive link,
+ * and maintains backward-compatible fallback for Supabase schema variations.
+ */
 export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" })
   .validator((data: StudentSubmitApplicationPayload) => data)
   .handler(async ({ data }) => {
@@ -835,124 +788,21 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
     };
   });
 
-export interface VerifyStudentCnfPayload {
-  cnfNumber: string;
-}
-
-export interface VerifyStudentCnfResult {
-  allowed: boolean;
-  cnf?: string | undefined;
-  fullName?: string | undefined;
-  college?: string | undefined;
-  passCategory?: string | undefined;
-  alreadyRegistered?: boolean | undefined;
-  registeredEmail?: string | undefined;
-  reason?: string | undefined;
-  errorCode?: string | undefined;
-}
-
-/**
- * Server function: Verifies candidate Confirmation Number (CNF) against the
- * official Excel roster and website confirmed master list.
- * Only Premium Pass participants are allowed to register.
- */
-export const verifyStudentCnfServerFn = createServerFn({ method: "POST" })
-  .validator((data: VerifyStudentCnfPayload) => data)
-  .handler(async ({ data }): Promise<VerifyStudentCnfResult> => {
-    const rawCnf = (data.cnfNumber || "").trim().toUpperCase();
-    if (!rawCnf) {
-      return {
-        allowed: false,
-        errorCode: "MISSING_CNF",
-        reason: "Confirmation Number (CNF) is required.",
-      };
-    }
-
-    const eligibility = verifyPassEligibility({ cnfNumber: rawCnf });
-    if (!eligibility.allowed) {
-      return {
-        allowed: false,
-        cnf: rawCnf,
-        passCategory: eligibility.passCategory,
-        errorCode: eligibility.errorCode,
-        reason: eligibility.reason,
-      };
-    }
-
-    // Check if this CNF has ALREADY completed registration
-    const serverClient = getServerSupabase();
-    const { data: existingStudent } = await serverClient
-      .from("students")
-      .select("user_id, resume_url, course_branch, full_name, college")
-      .ilike("team_code", rawCnf)
-      .maybeSingle();
-
-    if (existingStudent?.user_id) {
-      const { data: existingProf } = await serverClient
-        .from("profiles")
-        .select("email, role, branch, resume_path")
-        .eq("id", existingStudent.user_id)
-        .maybeSingle();
-
-      const isCompleted = Boolean(
-        existingProf?.email &&
-        !existingProf.email.endsWith("@equinox.mlrit.ac.in") &&
-        (existingStudent.resume_url || existingStudent.course_branch || existingProf.resume_path || existingProf.branch)
-      );
-
-      if (isCompleted) {
-        return {
-          allowed: false,
-          alreadyRegistered: true,
-          cnf: rawCnf,
-          registeredEmail: existingProf?.email || undefined,
-          reason: `Registration is already completed for confirmation number ${rawCnf}. Please log in using your registered email (${existingProf?.email}) and password.`,
-        };
-      }
-    }
-
-    const studentName =
-      eligibility.websiteStudent?.name ||
-      eligibility.participant?.name ||
-      existingStudent?.full_name ||
-      "";
-
-    return {
-      allowed: true,
-      alreadyRegistered: false,
-      cnf: rawCnf,
-      fullName: studentName,
-      college: existingStudent?.college || "MLR Institute of Technology",
-      passCategory: "Premium Pass",
-      reason: "Verified Premium Pass participant. Please complete the registration form below.",
-    };
-  });
-
 export interface RegisterStudentPayload {
   email: string;
   password: string;
   fullName: string;
   cnfNumber: string;
   college: string;
-  courseBranch: string;
   mobile: string;
-  confirmPassword?: string | undefined;
   teamCode?: string | undefined;
   skills?: string[] | undefined;
   graduationYear?: number | null | undefined;
-  videoUrl?: string | undefined;
-  resumeBase64?: string | undefined;
-  resumeFileName?: string | undefined;
-  resumeMimeType?: string | undefined;
-  resumePath?: string | undefined;
 }
 
 /**
- * Server function: Registers a student account with basic details only.
- * Step 1: Verifies Premium Pass eligibility against CSV and website master list.
- * Step 2: Validates basic details (Name, Email, Mobile, College, Branch, Password).
- * Step 3: Creates Supabase Auth account (with email_confirm: true), profiles, and students rows.
- * Resume and video are NOT collected during registration (collected during application).
+ * Server function: Registers a student account with auto-confirmed email.
+ * Students can register and sign in directly without email confirmation links.
  */
 export const registerStudentServerFn = createServerFn({ method: "POST" })
   .validator((data: RegisterStudentPayload) => data)
@@ -963,11 +813,9 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
       const cleanCnf = (data.cnfNumber || "").trim().toUpperCase();
       const cleanName = (data.fullName || "").trim();
       const cleanCollege = (data.college || "").trim();
-      const cleanBranch = (data.courseBranch || "").trim();
-      const rawMobile = (data.mobile || "").trim().replace(/\D/g, "");
-      const cleanPassword = (data.password || "").trim();
+      const cleanMobile = (data.mobile || "").trim();
 
-      if (!cleanEmail || !cleanPassword || !cleanName || !cleanCnf) {
+      if (!cleanEmail || !data.password || !cleanName || !cleanCnf) {
         return {
           success: false,
           error: "Full name, Confirmation Number (CNF), email, and password are required.",
@@ -976,50 +824,8 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         };
       }
 
-      if (cleanPassword.length < 6) {
-        return {
-          success: false,
-          error: "Password must be at least 6 characters long.",
-          user: null,
-          session: null,
-        };
-      }
-
-      if (data.confirmPassword && data.confirmPassword.trim() !== cleanPassword) {
-        return {
-          success: false,
-          error: "Passwords do not match. Please verify your confirm password field.",
-          user: null,
-          session: null,
-        };
-      }
-
-      if (!cleanBranch) {
-        return {
-          success: false,
-          error: "Course / Branch is required (e.g. B.Tech Computer Science and Engineering).",
-          user: null,
-          session: null,
-        };
-      }
-
-      const normalizedMobile =
-        rawMobile.startsWith("91") && rawMobile.length === 12
-          ? rawMobile.slice(2)
-          : rawMobile.startsWith("0") && rawMobile.length === 11
-          ? rawMobile.slice(1)
-          : rawMobile;
-
-      if (!normalizedMobile || !/^[6-9]\d{9}$/.test(normalizedMobile)) {
-        return {
-          success: false,
-          error: "Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).",
-          user: null,
-          session: null,
-        };
-      }
-
-      // 1. MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
+      // MANDATORY PREMIUM PASS ELIGIBILITY VERIFICATION (SERVER-SIDE)
+      // Rule: Existing Website CNF + Official Excel CNF Match + Premium Pass = ALLOWED
       const eligibility = verifyPassEligibility({
         cnfNumber: cleanCnf,
         email: cleanEmail,
@@ -1034,163 +840,112 @@ export const registerStudentServerFn = createServerFn({ method: "POST" })
         };
       }
 
-      // 2. Check if this CNF has already completed registration
-      const { data: existingStudent } = await supabaseAdmin
-        .from("students")
-        .select("id, user_id, course_branch, full_name")
-        .ilike("team_code", cleanCnf)
-        .maybeSingle();
+      // Use verified CNF and associated official team code from Excel roster if available
+      const officialTeamCode = cleanCnf;
 
-      if (existingStudent?.user_id) {
-        const { data: existingProf } = await supabaseAdmin
+      let userId: string | null = null;
+      let authUser: any = null;
+
+      // 1. Create user with email_confirm: true (direct registration without email verification)
+      const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: data.password,
+        email_confirm: true,
+        user_metadata: {
+          role: "student",
+          full_name: cleanName,
+          college: cleanCollege,
+          team_code: officialTeamCode,
+          cnf_number: cleanCnf,
+          pass_category: "Premium Pass",
+          mobile: cleanMobile,
+          skills: data.skills || [],
+          graduation_year: data.graduationYear || null,
+        },
+      });
+
+      if (createdUser?.user) {
+        userId = createdUser.user.id;
+        authUser = createdUser.user;
+      } else if (
+        createError &&
+        (createError.message.toLowerCase().includes("already registered") ||
+         createError.message.toLowerCase().includes("already been registered") ||
+         createError.message.toLowerCase().includes("already exists"))
+      ) {
+        // User already exists in auth: sync their password and metadata
+        const { data: existingProfile } = await supabaseAdmin
           .from("profiles")
-          .select("email, branch")
-          .eq("id", existingStudent.user_id)
+          .select("id")
+          .eq("email", cleanEmail)
           .maybeSingle();
 
-        const isAlreadyComplete = Boolean(
-          existingProf?.email &&
-          !existingProf.email.endsWith("@equinox.mlrit.ac.in") &&
-          (existingStudent.course_branch || existingProf.branch) &&
-          existingProf.email !== cleanEmail
-        );
-
-        if (isAlreadyComplete) {
-          return {
-            success: false,
-            error: `Registration is already completed for CNF ${cleanCnf}. Please sign in using your registered email (${existingProf?.email}).`,
-            user: null,
-            session: null,
-          };
+        if (existingProfile?.id) {
+          userId = existingProfile.id;
+        } else {
+          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
+          const existing = usersData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
+          userId = existing?.id || null;
         }
-      }
 
-      // 3. Check if email is already taken by a different CNF
-      const { data: existingEmailProf } = await supabaseAdmin
-        .from("profiles")
-        .select("id, email, full_name")
-        .eq("email", cleanEmail)
-        .maybeSingle();
-
-      if (existingEmailProf && existingStudent?.user_id && existingEmailProf.id !== existingStudent.user_id) {
+        if (userId) {
+          await supabaseAdmin.auth.admin.updateUserById(userId, {
+            password: data.password,
+            user_metadata: {
+              role: "student",
+              full_name: cleanName,
+              college: cleanCollege,
+              team_code: officialTeamCode,
+              cnf_number: cleanCnf,
+              pass_category: "Premium Pass",
+              mobile: cleanMobile,
+              skills: data.skills || [],
+              graduation_year: data.graduationYear || null,
+            },
+          });
+        }
+      } else if (createError) {
         return {
           success: false,
-          error: `An account with email ${cleanEmail} already exists. Please sign in or use another email.`,
+          error: createError.message || "Registration failed. Please try again.",
           user: null,
           session: null,
         };
       }
 
-      // 4. Provision or link Supabase Auth account securely
-      let userId: string;
-      let authUser: any = null;
-
-      // Check if Auth user already exists with this email
-      let existingAuthUser: any = null;
-      try {
-        const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
-        existingAuthUser = userList?.users?.find(
-          (u) => (u.email || "").toLowerCase() === cleanEmail
-        );
-      } catch {
-        // Continue
+      if (!userId) {
+        return {
+          success: false,
+          error: "Could not initialize student account.",
+          user: null,
+          session: null,
+        };
       }
 
-      if (existingAuthUser?.id) {
-        userId = existingAuthUser.id;
-        const { data: updated, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-          password: cleanPassword,
-          email_confirm: true,
-          user_metadata: {
-            role: "student",
-            full_name: cleanName,
-            college: cleanCollege,
-            course_branch: cleanBranch,
-            team_code: cleanCnf,
-            cnf_number: cleanCnf,
-            pass_category: "Premium Pass",
-            mobile: normalizedMobile,
-            registration_completed: true,
-          },
-        });
-        if (updateError) {
-          return {
-            success: false,
-            error: updateError.message,
-            user: null,
-            session: null,
-          };
-        }
-        authUser = updated.user;
-      } else {
-        const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email: cleanEmail,
-          password: cleanPassword,
-          email_confirm: true,
-          user_metadata: {
-            role: "student",
-            full_name: cleanName,
-            college: cleanCollege,
-            course_branch: cleanBranch,
-            team_code: cleanCnf,
-            cnf_number: cleanCnf,
-            pass_category: "Premium Pass",
-            mobile: normalizedMobile,
-            registration_completed: true,
-          },
-        });
-
-        if (createError) {
-          return {
-            success: false,
-            error: createError.message,
-            user: null,
-            session: null,
-          };
-        }
-        userId = created.user.id;
-        authUser = created.user;
-      }
-
-      // 5. Upsert profiles record
-      const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
+      // 2. Ensure profiles entry exists
+      await supabaseAdmin.from("profiles").upsert({
         id: userId,
         role: "student",
         email: cleanEmail,
         full_name: cleanName,
         college: cleanCollege,
-        branch: cleanBranch,
-        updated_at: new Date().toISOString(),
       });
 
-      if (profileError) {
-        console.warn("Profiles upsert warning:", profileError.message);
-      }
+      // 3. Ensure students entry exists
+      await supabaseAdmin.from("students").upsert({
+        user_id: userId,
+        full_name: cleanName,
+        college: cleanCollege,
+        team_code: officialTeamCode,
+        mobile: cleanMobile,
+        skills: data.skills || [],
+        graduation_year: data.graduationYear || null,
+      });
 
-      // 6. Upsert students record
-      const { error: studentError } = await supabaseAdmin.from("students").upsert(
-        {
-          user_id: userId,
-          full_name: cleanName,
-          college: cleanCollege,
-          course_branch: cleanBranch,
-          team_code: cleanCnf,
-          mobile: normalizedMobile,
-          skills: data.skills || [],
-          graduation_year: data.graduationYear || null,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
-
-      if (studentError) {
-        console.warn("Students upsert warning:", studentError.message);
-      }
-
-      // 7. Sign in directly to return active authenticated session
+      // 4. Authenticate directly to obtain an active session immediately
       const { data: authData } = await getServerAnonClient().auth.signInWithPassword({
         email: cleanEmail,
-        password: cleanPassword,
+        password: data.password,
       });
 
       return {
@@ -1663,11 +1418,11 @@ export const adminUpdateApplicationStatusServerFn = createServerFn({ method: "PO
     // 3. Update application status using admin bearer token to satisfy trigger security
     const adminUserClient = createClient(
       (typeof process !== "undefined" && process.env?.["SUPABASE_URL"]) ||
-      (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
-      "https://plyvtevuxdmzswtvpmwv.supabase.co",
+        (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
+        "https://plyvtevuxdmzswtvpmwv.supabase.co",
       (typeof process !== "undefined" && process.env?.["SUPABASE_ANON_KEY"]) ||
-      (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_ANON_KEY"]) ||
-      "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb",
+        (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_ANON_KEY"]) ||
+        "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb",
       {
         global: { headers: { Authorization: `Bearer ${adminToken}` } },
         auth: { persistSession: false, autoRefreshToken: false },

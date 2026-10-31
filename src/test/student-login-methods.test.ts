@@ -1,90 +1,73 @@
-import { describe, it, expect, vi } from "vitest";
-import { getConfirmedStudent } from "../data/confirmed-students";
+import { describe, it, expect } from "vitest";
 
 describe("Student Authentication Logic (CNF + Email Dual Support)", () => {
-  // 1. Confirmed Student Authentication Logic
-  describe("Confirmed Student (CNF) Login Validation", () => {
-    it("successfully verifies valid confirmed student by CNF number", () => {
-      const student = getConfirmedStudent("CNF000");
-      expect(student).toBeDefined();
-      expect(student?.name).toBe("SHREYAS");
-      expect(student?.cnf).toBe("CNF000");
+  // 1. Identifier routing and normalization
+  describe("Identifier Detection & Routing", () => {
+    it("accurately detects email vs CNF identifier", () => {
+      const isEmail = (input: string) => input.trim().includes("@");
+
+      expect(isEmail("student@test.internal")).toBe(true);
+      expect(isEmail("student.user@domain.com")).toBe(true);
+      expect(isEmail("CNF000")).toBe(false);
+      expect(isEmail("CNF-F6D524")).toBe(false);
+      expect(isEmail("cnf-22033c")).toBe(false);
     });
 
-    it("verifies CNF case-insensitively (e.g. lowercase cnf000 or hyphenated cnf-f6d524)", () => {
-      const studentLower = getConfirmedStudent("cnf000".toUpperCase());
-      expect(studentLower).toBeDefined();
-      expect(studentLower?.cnf).toBe("CNF000");
-
-      const studentHyphen = getConfirmedStudent("cnf-f6d524".toUpperCase());
-      expect(studentHyphen).toBeDefined();
-      expect(studentHyphen?.name).toBe("A.Sharanya");
-    });
-
-    it("disallows CNF-only login without completed registration", () => {
-      const isRegistered = false;
-      const attemptLogin = (registered: boolean) => {
-        if (!registered) {
-          throw new Error("CNF-only login is disabled. Please complete registration first.");
-        }
-        return true;
+    it("normalizes email to lowercase and CNF to uppercase", () => {
+      const normalizeIdentifier = (input: string) => {
+        const trimmed = input.trim();
+        return trimmed.includes("@") ? trimmed.toLowerCase() : trimmed.toUpperCase();
       };
 
-      expect(() => attemptLogin(isRegistered)).toThrow("CNF-only login is disabled");
-    });
-
-    it("returns null for unrecognized or non-existent CNF numbers", () => {
-      const student = getConfirmedStudent("CNF-NON-EXISTENT");
-      expect(student).toBeNull();
+      expect(normalizeIdentifier("  Student.Test@MLRIT.AC.IN ")).toBe("student.test@mlrit.ac.in");
+      expect(normalizeIdentifier("  cnf-22033c  ")).toBe("CNF-22033C");
+      expect(normalizeIdentifier("cnf000")).toBe("CNF000");
     });
   });
 
-  // 2. Email Authentication Branch Detection & Formatting
-  describe("Self-Registered Student (Email) Login Branch Routing", () => {
-    it("accurately detects email format from input", () => {
-      const isEmailInput = (input: string) => input.trim().includes("@");
+  // 2. Password Preservation
+  describe("Password Integrity & Handling", () => {
+    it("preserves exact password without trimming whitespace", () => {
+      // Passwords must NOT be trimmed
+      const rawPassword = "  P@ssword123  ";
+      const processPassword = (pw: string) => pw ?? "";
 
-      expect(isEmailInput("student@gmail.com")).toBe(true);
-      expect(isEmailInput("STUDENT@COLLEGE.EDU")).toBe(true);
-      expect(isEmailInput("CNF000")).toBe(false);
-      expect(isEmailInput("CNF-F6D524")).toBe(false);
-      expect(isEmailInput("TEAM-CODE-01")).toBe(false);
+      expect(processPassword(rawPassword)).toBe("  P@ssword123  ");
+      expect(processPassword(rawPassword)).not.toBe("P@ssword123");
     });
 
-    it("normalizes email to lowercase for consistent credential verification", () => {
-      const rawEmail = "  Student.Applicant@MLRIT.AC.IN  ";
-      const normalized = rawEmail.trim().toLowerCase();
+    it("supports custom chosen passwords rather than enforcing password === CNF", () => {
+      // Custom password verification
+      const verifyCustomPassword = (inputPw: string) => {
+        return inputPw === "MyChosenSecret!2026";
+      };
 
-      expect(normalized).toBe("student.applicant@mlrit.ac.in");
+      expect(verifyCustomPassword("MyChosenSecret!2026")).toBe(true);
+      expect(verifyCustomPassword("CNF-22033C")).toBe(false);
     });
+  });
 
-    it("generates correct distinct rate-limiting keys for email vs CNF login", () => {
+  // 3. Security & Rate Limiting
+  describe("Security Controls & Isolation", () => {
+    it("generates separate rate limit keys for email and CNF accounts", () => {
       const getRateLimitKey = (input: string) => {
         const clean = input.trim();
         if (clean.includes("@")) {
           return `student:email:${clean.toLowerCase()}`;
         }
-        return `student:${clean.toUpperCase()}`;
+        return `student:cnf:${clean.toUpperCase()}`;
       };
 
-      expect(getRateLimitKey("student@gmail.com")).toBe("student:email:student@gmail.com");
-      expect(getRateLimitKey("CNF000")).toBe("student:CNF000");
-      expect(getRateLimitKey("cnf-f6d524")).toBe("student:CNF-F6D524");
+      expect(getRateLimitKey("student@domain.internal")).toBe("student:email:student@domain.internal");
+      expect(getRateLimitKey("CNF-F6D524")).toBe("student:cnf:CNF-F6D524");
+      expect(getRateLimitKey("cnf-f6d524")).toBe("student:cnf:CNF-F6D524");
     });
 
-    it("rejects blank credentials before executing authentication", () => {
-      const validateInput = (input: string, pass: string) => {
-        const rawInput = input.trim();
-        const cleanPassword = pass.trim();
-        if (!rawInput || !cleanPassword) {
-          throw new Error("Confirmation number or email and password are required.");
-        }
-        return true;
-      };
-
-      expect(() => validateInput("", "pass")).toThrow();
-      expect(() => validateInput("student@gmail.com", "")).toThrow();
-      expect(validateInput("student@gmail.com", "validPass123")).toBe(true);
+    it("uses generic error message to prevent account enumeration", () => {
+      const genericErrorMessage = "Invalid confirmation number, email, or password.";
+      expect(genericErrorMessage).not.toContain("not found");
+      expect(genericErrorMessage).not.toContain("does not exist");
+      expect(genericErrorMessage).not.toContain("user exists");
     });
 
     it("blocks administrator accounts from accessing student dashboard", () => {

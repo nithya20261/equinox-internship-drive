@@ -79,27 +79,17 @@ function Login() {
       <form className="mt-8 space-y-5" onSubmit={handleLogin}>
         {errorMessage && (
           <div
-            className="flex flex-col gap-2 border-l-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+            className="flex items-center gap-2 border-l-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive"
             role="alert"
           >
             <span>{errorMessage}</span>
-            {(errorMessage.includes("Registration Incomplete") || errorMessage.includes("disabled") || errorMessage.includes("register")) && (
-              <div className="pt-2">
-                <a
-                  href={cnfNumber.trim() ? `/register?cnf=${encodeURIComponent(cnfNumber.trim().toUpperCase())}` : "/register"}
-                  className="btn btn-signal text-xs font-bold w-full py-2 flex items-center justify-center gap-1"
-                >
-                  Complete Registration for {cnfNumber.trim().toUpperCase() || "Your CNF"} &rarr;
-                </a>
-              </div>
-            )}
           </div>
         )}
 
         {role === "student" ? (
           <>
             <div>
-              <FieldLabel htmlFor="l-cnf-number" hint="Your registered email or verified CNF">Registered Email / CNF Number</FieldLabel>
+              <FieldLabel htmlFor="l-cnf-number" hint="CNF number, email, or team code">Confirmation Number / Email</FieldLabel>
               <input
                 id="l-cnf-number"
                 type="text"
@@ -110,13 +100,13 @@ function Login() {
                   if (errorMessage) setErrorMessage(null);
                 }}
                 className="field font-mono font-medium"
-                placeholder="name@college.edu, personal email, or CNF"
+                placeholder="CNF-XXXXXX or your registered email"
                 required
               />
             </div>
 
             <div>
-              <FieldLabel htmlFor="l-student-pass" hint="Password chosen during registration">Password</FieldLabel>
+              <FieldLabel htmlFor="l-student-pass" hint="Your registered password">Password</FieldLabel>
               <input
                 id="l-student-pass"
                 type="password"
@@ -127,7 +117,7 @@ function Login() {
                   if (errorMessage) setErrorMessage(null);
                 }}
                 className="field font-mono"
-                placeholder="Enter your account password"
+                placeholder="Enter password"
                 required
               />
             </div>
