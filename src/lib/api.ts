@@ -333,7 +333,7 @@ export async function loginStudent(credentials: {
   const isEmail = rawInput.includes("@");
   const cnfNumber = isEmail ? rawInput.toLowerCase() : rawInput.toUpperCase();
   const fullName = (credentials.name || "").trim();
-  const cleanPassword = credentials.password.trim();
+  const cleanPassword = credentials.password;
 
   // Execute server-side authenticated flow supporting both CNF numbers and registered emails
   try {
@@ -453,7 +453,7 @@ export async function loginAdmin(credentials: { username: string; password: stri
     throw new Error("Invalid administrator username or credentials.");
   }
 
-  const cleanPassword = credentials.password.trim();
+  const cleanPassword = credentials.password;
 
   // 1. First try server function
   try {

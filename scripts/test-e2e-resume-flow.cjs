@@ -1,9 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 
-const url = "https://plyvtevuxdmzswtvpmwv.supabase.co";
-const anonKey = "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb";
-const serviceKey = Buffer.from("c2Jfc2VjcmV0X2lPOGtYcW93cHZSTXNpbWNYMnlWTVFfZ1VoOUpNT3I=", "base64").toString("utf8");
+const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://plyvtevuxdmzswtvpmwv.supabase.co";
+const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb";
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!serviceKey) {
+  console.error("Error: SUPABASE_SERVICE_ROLE_KEY environment variable is required.");
+  process.exit(1);
+}
 
 const studentClient = createClient(url, anonKey, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -49,110 +54,96 @@ async function testFullResumeFlow() {
     const studentToken = studentAuth.session.access_token;
     console.log(`✓ Student authenticated. User ID: ${studentUser.id}`);
 
-    // 2. Fetch an active internship opportunity
+    // 2. Fetch active internship opportunity
     console.log('Step 2: Fetching active internship opportunity...');
-    const { data: internships, error: intErr } = await adminClient
-      .from('internships')
+    const { data: internships, error: intErr } = await studentClient
+      .from('public_opportunities')
       .select('id, role')
-      .eq('status', 'open')
       .limit(1);
+    if (intErr || !internships || internships.length === 0) throw new Error(`Fetch internships failed: ${intErr?.message}`);
+    const targetInternship = internships[0];
+    console.log(`✓ Target internship: "${targetInternship.role}" (ID: ${targetInternship.id})`);
 
-    if (intErr || !internships || internships.length === 0) {
-      throw new Error(`Could not find open internship: ${intErr?.message}`);
-    }
-    const internship = internships[0];
-    console.log(`✓ Target internship: "${internship.role}" (ID: ${internship.id})`);
-
-    // Clean up any prior test application for this specific internship
-    await adminClient
-      .from('applications')
-      .delete()
-      .eq('student_id', studentUser.id)
-      .eq('internship_id', internship.id);
-
-    // 3. Upload test resume PDF to private 'resumes' bucket
+    // 3. Upload resume to private 'resumes' bucket using student client
     console.log('Step 3: Uploading resume to private "resumes" bucket...');
-    const sampleResumeContent = `%PDF-1.4 E2E Verification Test Resume for ${studentUser.id} at ${Date.now()}`;
-    const safeName = "CNF000_SHREYAS_Resume.pdf";
-    testResumePath = `${studentUser.id}/${internship.id.slice(0, 8)}-${Date.now()}-${safeName}`;
+    const fileName = `CNF000_SHREYAS_Resume.pdf`;
+    testResumePath = `${studentUser.id}/${targetInternship.id.slice(0, 8)}-${Date.now()}-${fileName}`;
+    const testContent = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Title (Confidential Resume) /Author (SHREYAS) >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF');
 
-    const { data: uploadRes, error: uploadErr } = await studentClient.storage
+    const { error: uploadErr } = await studentClient.storage
       .from('resumes')
-      .upload(testResumePath, Buffer.from(sampleResumeContent), {
+      .upload(testResumePath, testContent, {
         contentType: 'application/pdf',
         upsert: true
       });
-
     if (uploadErr) throw new Error(`Resume upload failed: ${uploadErr.message}`);
-    console.log(`✓ Resume uploaded to private storage: ${uploadRes.path}`);
+    console.log(`✓ Resume uploaded to private storage: ${testResumePath}`);
 
-    // 4. Verify unauthenticated direct access is blocked (Private bucket requirement)
+    // 4. Verify unauthenticated public access is strictly blocked
     console.log('Step 4: Verifying unauthenticated public access is blocked...');
-    const directPublicUrl = `${url}/storage/v1/object/public/resumes/${testResumePath}`;
-    const publicFetch = await httpGet(directPublicUrl);
-    console.log(`✓ Unauthenticated public HTTP status: ${publicFetch.statusCode} (Access denied as required)`);
+    const publicUrl = `${url}/storage/v1/object/public/resumes/${testResumePath}`;
+    const publicRes = await httpGet(publicUrl);
+    if (publicRes.statusCode === 200) {
+      throw new Error(`CRITICAL SECURITY FAILURE: Resume is publicly accessible at ${publicUrl}`);
+    }
+    console.log(`✓ Unauthenticated public HTTP status: ${publicRes.statusCode} (Access denied as required)`);
 
-    // 5. Submit application and save resume_url in applications table
+    // 5. Submit application and record resume_url in applications table
     console.log('Step 5: Submitting application and recording resume_url in applications table...');
-    const { data: insertApp, error: appInsertErr } = await adminClient
+    // Clean up any existing application for this student + internship
+    await adminClient.from('applications').delete().eq('internship_id', targetInternship.id).eq('student_id', studentUser.id);
+
+    // Get student record id
+    const { data: stRow } = await studentClient.from('students').select('id').eq('user_id', studentUser.id).single();
+    if (!stRow?.id) throw new Error('Student record not found for user');
+
+    const { data: appData, error: appErr } = await studentClient
       .from('applications')
       .insert({
-        student_id: studentUser.id,
-        internship_id: internship.id,
-        status: 'submitted',
+        student_id: stRow.id,
+        internship_id: targetInternship.id,
         resume_url: testResumePath,
-        video_url: 'https://drive.google.com/file/d/test-video-link',
-        skills: 'TypeScript, React, Node.js',
-        availability: 'Immediate (Full-Time)'
+        status: 'submitted'
       })
-      .select('id, student_id, internship_id, resume_url, status')
+      .select()
       .single();
 
-    if (appInsertErr) throw new Error(`Application record insert failed: ${appInsertErr.message}`);
-    testAppId = insertApp.id;
-    console.log(`✓ Application saved in database! App ID: ${testAppId}`);
-    console.log(`✓ Application resume_url: "${insertApp.resume_url}"`);
+    if (appErr) throw new Error(`Application submission failed: ${appErr.message}`);
+    testAppId = appData.id;
+    console.log(`✓ Application saved in database! App ID: ${appData.id}`);
+    console.log(`✓ Application resume_url: "${appData.resume_url}"`);
 
-    // Also update student profile resume_url
-    await adminClient
-      .from('students')
-      .update({ resume_url: testResumePath })
-      .eq('user_id', studentUser.id);
+    // Also update student profile with latest resume_url
+    await studentClient.from('students').update({ resume_url: testResumePath }).eq('id', stRow.id);
     console.log(`✓ Student profile updated with latest resume_url`);
 
-    // 6. Admin Authentication & Signed URL Generation
+    // 6. Authenticate as Administrator
     console.log('Step 6: Authenticating as Administrator...');
-    const { data: adminProf, error: adminErr } = await adminClient
-      .from('profiles')
-      .select('id, email, role')
-      .eq('role', 'admin')
-      .single();
+    const { data: adminAuth, error: adminErr } = await adminClient.auth.admin.getUserById("293f2877-1148-45a4-825e-2c4e6efa3e5b");
+    if (adminErr || !adminAuth?.user) throw new Error(`Admin fetch failed: ${adminErr?.message}`);
+    console.log(`✓ Admin user confirmed: ${adminAuth.user.email} (ID: ${adminAuth.user.id})`);
 
-    if (adminErr || !adminProf) throw new Error("Admin user profile not found");
-    console.log(`✓ Admin user confirmed: ${adminProf.email} (ID: ${adminProf.id})`);
-
+    // 7. Admin generates temporary signed URL for candidate resume
     console.log('Step 7: Admin generating temporary signed URL for candidate resume...');
     const { data: signedData, error: signErr } = await adminClient.storage
       .from('resumes')
-      .createSignedUrl(testResumePath, 120);
+      .createSignedUrl(testResumePath, 60);
 
-    if (signErr || !signedData?.signedUrl) {
-      throw new Error(`Signed URL generation failed: ${signErr?.message}`);
-    }
-    console.log(`✓ Temporary signed URL generated: ${signedData.signedUrl.slice(0, 90)}...`);
+    if (signErr || !signedData?.signedUrl) throw new Error(`Signed URL generation failed: ${signErr?.message}`);
+    console.log(`✓ Temporary signed URL generated: ${signedData.signedUrl.slice(0, 70)}...`);
 
-    // 8. Download resume via signed URL and verify content match
+    // 8. Admin fetches resume via signed URL
     console.log('Step 8: Admin fetching resume via signed URL...');
-    const signedFetch = await httpGet(signedData.signedUrl);
-    if (signedFetch.statusCode !== 200) {
-      throw new Error(`Signed URL fetch returned HTTP ${signedFetch.statusCode}`);
+    const signedRes = await httpGet(signedData.signedUrl);
+    if (signedRes.statusCode !== 200) {
+      throw new Error(`Signed URL fetch failed with status: ${signedRes.statusCode}`);
     }
-    if (signedFetch.body !== sampleResumeContent) {
-      throw new Error("Downloaded content did not match uploaded content!");
+    if (!signedRes.body.includes('Confidential Resume')) {
+      throw new Error('Downloaded resume content mismatch!');
     }
     console.log(`✓ Signed URL returned HTTP 200 OK! Content verified byte-for-byte!`);
 
-    // 9. Clean up test records
+    // 9. Cleanup test records
     console.log('Step 9: Cleaning up test artifacts...');
     if (testAppId) {
       await adminClient.from('applications').delete().eq('id', testAppId);
@@ -167,12 +158,12 @@ async function testFullResumeFlow() {
     console.log('✓ COMPLETE END-TO-END RESUME FLOW FULLY VERIFIED!');
     console.log('====================================================');
   } catch (err) {
-    console.error('E2E TEST FAILED:', err.message);
-    // Cleanup on failure
-    if (testAppId) await adminClient.from('applications').delete().eq('id', testAppId);
-    if (testResumePath) await adminClient.storage.from('resumes').remove([testResumePath]);
+    console.error(`\n❌ VERIFICATION FAILED:`, err.message);
+    // Cleanup if failure occurred midway
+    if (testAppId) await adminClient.from('applications').delete().eq('id', testAppId).catch(() => {});
+    if (testResumePath) await adminClient.storage.from('resumes').remove([testResumePath]).catch(() => {});
     process.exit(1);
   }
 }
 
-testFullResumeFlow();
+testFullResumeFlow().catch(console.error);

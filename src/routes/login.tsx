@@ -106,7 +106,7 @@ function Login() {
             </div>
 
             <div>
-              <FieldLabel htmlFor="l-student-pass" hint="Your CNF number or registered password">Password</FieldLabel>
+              <FieldLabel htmlFor="l-student-pass" hint="Your registered password">Password</FieldLabel>
               <input
                 id="l-student-pass"
                 type="password"
