@@ -28,20 +28,6 @@ function getServerAnonClient(): SupabaseClient {
 // 2. Server-only client initialized with service_role for restricted RPC & admin operations
 let cachedServerClient: SupabaseClient | null = null;
 
-function getFallbackServiceKey(): string {
-  try {
-    if (typeof atob !== "undefined") {
-      return atob("c2Jfc2VjcmV0X2lPOGtYcW93cHZSTXNpbWNYMnlWTVFfZ1VoOUpNT3I=");
-    }
-    if (typeof Buffer !== "undefined") {
-      return Buffer.from("c2Jfc2VjcmV0X2lPOGtYcW93cHZSTXNpbWNYMnlWTVFfZ1VoOUpNT3I=", "base64").toString("utf8");
-    }
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
 function getServerSupabase(): SupabaseClient {
   if (cachedServerClient) return cachedServerClient;
 
@@ -56,7 +42,7 @@ function getServerSupabase(): SupabaseClient {
     (typeof process !== "undefined" && process.env?.["SUPABASE_SERVICE_ROLE_KEY"]) ||
     (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["SUPABASE_SERVICE_ROLE_KEY"]);
 
-  const effectiveKey = serviceRoleKey || getFallbackServiceKey();
+  const effectiveKey = serviceRoleKey;
   if (!effectiveKey) {
     throw new Error(
       "Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Server-side service role key must be configured."

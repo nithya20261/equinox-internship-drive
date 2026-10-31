@@ -59,6 +59,8 @@ export default {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
+      // Server-fn calls must keep their JSON error body; the client can't parse an HTML page.
+      if (new URL(request.url).pathname.startsWith("/_serverFn")) return response;
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
