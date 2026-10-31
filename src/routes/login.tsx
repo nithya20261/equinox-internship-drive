@@ -8,11 +8,15 @@ import { loginStudent, loginAdmin } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   head: () => pageMeta("Login", "Log in to your Equinox E-Summit 2K26 Internship Drive account."),
+  // Admin tab is hidden from the public page; admins open /login?admin=1
+  validateSearch: (search: Record<string, unknown>): { admin?: boolean } =>
+    search["admin"] === undefined ? {} : { admin: String(search["admin"]) === "1" || search["admin"] === true },
   component: Login,
 });
 
 function Login() {
   const router = useRouter();
+  const { admin: showAdmin } = Route.useSearch();
   const [role, setRole] = useState<"student" | "admin">("student");
   
   // Student login fields: Confirmation Number (CNF) & Password (same as CNF)
@@ -66,15 +70,17 @@ function Login() {
   return (
     <AuthLayout title="Welcome">
       <h2 className="headline text-3xl">Log in</h2>
-      <div className="mt-6">
-        <RoleTabs
-          value={role}
-          onChange={(newRole) => {
-            setRole(newRole);
-            setErrorMessage(null);
-          }}
-        />
-      </div>
+      {showAdmin && (
+        <div className="mt-6">
+          <RoleTabs
+            value={role}
+            onChange={(newRole) => {
+              setRole(newRole);
+              setErrorMessage(null);
+            }}
+          />
+        </div>
+      )}
 
       <form className="mt-8 space-y-5" onSubmit={handleLogin}>
         {errorMessage && (
