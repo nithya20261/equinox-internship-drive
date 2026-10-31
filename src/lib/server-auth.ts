@@ -3,6 +3,16 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { verifyPassEligibility } from "@/lib/pass-eligibility";
 import { INTERNSHIP_COMPANIES } from "@/data/site";
 
+const PREMIUM_ONLY_MESSAGE =
+  "Access denied: only verified Premium Pass attendees can access the Equinox Internship Drive.";
+
+/** Single gate for every student entry point (login, application submit). */
+function assertPremiumPass(cnf: string | null | undefined): void {
+  if (!cnf || !verifyPassEligibility({ cnfNumber: cnf }).allowed) {
+    throw new Error(PREMIUM_ONLY_MESSAGE);
+  }
+}
+
 // 1. Separate anon/publishable-key client for standard user authentication (auth.signInWithPassword)
 let cachedAnonClient: SupabaseClient | null = null;
 
@@ -326,6 +336,9 @@ export async function loginStudentCore(data: StudentAuthPayload) {
     .eq("user_id", userId)
     .maybeSingle();
 
+  // Block non-Premium accounts (test accounts, rejected passes) before any session is returned
+  assertPremiumPass(existingStudent?.team_code || teamCode);
+
   if (!existingStudent) {
     await serverClient.from("students").upsert({
       user_id: userId,
@@ -612,6 +625,8 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
       .select("id, team_code, full_name, mobile, college, course_branch, resume_url")
       .eq("user_id", userId)
       .maybeSingle();
+
+    assertPremiumPass(existingStudent?.team_code || meta["team_code"] || meta["cnf_number"]);
 
     const studentIdsToCheck = [userId];
     if (existingStudent?.id) {
