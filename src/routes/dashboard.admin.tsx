@@ -183,7 +183,7 @@ function AdminConsole() {
           </p>
 
           <div className="mt-6 flex flex-col gap-3">
-            <Link to="/login" className="btn btn-signal w-full">
+            <Link to="/login" search={{ admin: true }} className="btn btn-signal w-full">
               Log in as Administrator
             </Link>
 
