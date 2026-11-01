@@ -17,7 +17,7 @@ export const Route = createFileRoute("/login")({
 function Login() {
   const router = useRouter();
   const { admin: showAdmin } = Route.useSearch();
-  const [role, setRole] = useState<"student" | "admin">("student");
+  const [role, setRole] = useState<"student" | "admin">(showAdmin ? "admin" : "student");
   
   // Student login fields: Confirmation Number (CNF) & Password (same as CNF)
   const [cnfNumber, setCnfNumber] = useState("");
@@ -190,3 +190,4 @@ function Login() {
     </AuthLayout>
   );
 }
+
