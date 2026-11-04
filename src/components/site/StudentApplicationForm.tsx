@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { Loader2, CheckCircle2, AlertCircle, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { isCnfEligible } from "@/lib/pass-eligibility";
 import {
   submitStudentApplication,
   getOpportunities,
@@ -165,13 +166,24 @@ export function StudentApplicationForm({
       } else if (resumeFile.size > 10 * 1024 * 1024) {
         errors.resumeFile = "Resume file size must be less than 10MB.";
       } else {
-        // Enforce CNFNUMBER_NAME naming format
-        // Compare alphanumerics only, so "CNF-22033C", "CNF22033C" and "cnf_22033c" all match.
+        // Enforce CNFNUMBER_NAME or ROLLNO_NAME naming format
+        // Compare alphanumerics only, so "CNF-22033C", "CNF22033C" and "23R21A05M8" all match.
         const alnumUpper = (s: string) => s.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
         const cleanCnf = alnumUpper(user?.teamCode || "");
-        if (cleanCnf && !alnumUpper(resumeFile.name).includes(cleanCnf)) {
-          const expectedFormat = `${user?.teamCode || "CNFNUMBER"}_${(fullName.trim() || user?.fullName || "YOURNAME").replace(/\s+/g, "_")}.pdf`;
-          errors.resumeFile = `Resume filename must follow the required format: ${expectedFormat}. Please rename your file before uploading.`;
+        const fileNameUpper = alnumUpper(resumeFile.name);
+
+        // 1. Matches user's registered CNF or Roll Number (e.g. 23R21A05M8_NAME.pdf or CNF-7EEEB1_NAME.pdf)
+        const matchesUserCode = Boolean(cleanCnf && fileNameUpper.includes(cleanCnf));
+
+        // 2. Or matches an eligible CNF or Roll Number prefix extracted from the filename
+        const nameTokens = resumeFile.name.split(/[^A-Za-z0-9-]+/).filter(Boolean);
+        const hasEligibleTokenInName = nameTokens.some((token) => isCnfEligible(token));
+
+        if (!matchesUserCode && !hasEligibleTokenInName) {
+          const studentIdentifier = user?.teamCode || "CNFNUMBER_OR_ROLLNO";
+          const candidateName = (fullName.trim() || user?.fullName || "YOURNAME").replace(/\s+/g, "_");
+          const expectedFormat = `${studentIdentifier}_${candidateName}.pdf`;
+          errors.resumeFile = `Resume filename must follow the required format: CNFNUMBER_YOURNAME or ROLLNO_YOURNAME (e.g. ${expectedFormat}). Please rename your file before uploading.`;
         }
       }
     }
@@ -540,7 +552,7 @@ export function StudentApplicationForm({
               </p>
             )}
             <p className="mt-2.5 text-[11px] font-mono text-amber-300/90 leading-relaxed">
-              <span className="text-amber-400 font-bold">*</span> Resume file must be named as <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">CNFNUMBER_NAME</code> (e.g. <span className="text-white">CNF000_YOURNAME.pdf</span>). <span className="text-amber-200 font-semibold underline">Only those will be considered.*</span>
+              <span className="text-amber-400 font-bold">*</span> Resume file must be named as <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">CNFNUMBER_NAME</code> or <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">ROLLNO_NAME</code> (e.g. <span className="text-white">{user?.teamCode ? `${user.teamCode}_YOURNAME.pdf` : "CNF000_YOURNAME.pdf or 23R21A05M8_YOURNAME.pdf"}</span>). <span className="text-amber-200 font-semibold underline">Only those will be considered.*</span>
             </p>
           </div>
         </div>
@@ -574,7 +586,7 @@ export function StudentApplicationForm({
               </p>
             )}
             <p className="mt-2.5 text-[11px] font-mono text-amber-300/90 leading-relaxed">
-              <span className="text-amber-400 font-bold">*</span> Video file in Google Drive must be named as <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">CNFNUMBER_NAME</code> (e.g. <span className="text-white">CNF000_YOURNAME.mp4</span>). <span className="text-amber-200 font-semibold underline">Only those will be considered.*</span>
+              <span className="text-amber-400 font-bold">*</span> Video file in Google Drive must be named as <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">CNFNUMBER_NAME</code> or <code className="bg-black/60 px-1.5 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">ROLLNO_NAME</code> (e.g. <span className="text-white">{user?.teamCode ? `${user.teamCode}_YOURNAME.mp4` : "CNF000_YOURNAME.mp4 or 23R21A05M8_YOURNAME.mp4"}</span>). <span className="text-amber-200 font-semibold underline">Only those will be considered.*</span>
             </p>
           </div>
         </div>
@@ -584,11 +596,15 @@ export function StudentApplicationForm({
           <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
           <p className="leading-relaxed">
             <strong className="text-amber-400 font-bold uppercase tracking-wider">MANDATORY FILE NAMING:</strong>{" "}
-            Both your Resume file and Video file must be named as{" "}
+            Both your Resume file and Video file in Google Drive must be named as{" "}
             <code className="bg-black/80 px-2 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">
               CNFNUMBER_NAME
             </code>{" "}
-            (e.g., <span className="text-white">CNF000_YOURNAME</span>).{" "}
+            or{" "}
+            <code className="bg-black/80 px-2 py-0.5 rounded text-[#33FF67] font-bold border border-white/10">
+              ROLLNO_NAME
+            </code>{" "}
+            (e.g., <span className="text-white">{user?.teamCode ? `${user.teamCode}_YOURNAME` : "CNF000_YOURNAME or 23R21A05M8_YOURNAME"}</span>).{" "}
             <strong className="text-amber-200 underline">Only those will be considered.*</strong>
           </p>
         </div>

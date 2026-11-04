@@ -1020,7 +1020,7 @@ function AdminConsole() {
                   <tr>
                     <th className="px-4 py-3">#</th>
                     <th className="px-4 py-3">Candidate & Email</th>
-                    <th className="px-4 py-3">CNF Number</th>
+                    <th className="px-4 py-3">CNF / Roll No</th>
                     <th className="px-4 py-3">Pass Verification</th>
                     <th className="px-4 py-3">Institution & Branch</th>
                     <th className="px-4 py-3">Contact</th>
@@ -1524,7 +1524,7 @@ function AdminConsole() {
               {/* Candidate Info Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-white/10 bg-[#121212] p-4 font-mono">
                 <div>
-                  <span className="text-white/40 block text-[10px] uppercase">Confirmation (CNF)</span>
+                  <span className="text-white/40 block text-[10px] uppercase">Confirmation (CNF) / Roll No</span>
                   <span className="text-[#33FF67] font-bold text-sm">
                     {selectedAppModal.student?.team_code || selectedAppModal.cnf_number || "CNF"}
                   </span>
