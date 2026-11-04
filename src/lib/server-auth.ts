@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { verifyPassEligibility } from "@/lib/pass-eligibility";
+import { verifyPassEligibility, isCnfEligible } from "@/lib/pass-eligibility";
 import { INTERNSHIP_COMPANIES } from "@/data/site";
 
 const PREMIUM_ONLY_MESSAGE =
@@ -37,9 +37,26 @@ function getServerAnonClient(): SupabaseClient {
 
 // 2. Server-only client initialized with service_role for restricted RPC & admin operations
 let cachedServerClient: SupabaseClient | null = null;
+let cachedServiceKey: string | null = null;
+
+function getActiveServiceRoleKey(): string {
+  const envKey =
+    (typeof process !== "undefined" && process.env?.["SUPABASE_SERVICE_ROLE_KEY"]) ||
+    (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["SUPABASE_SERVICE_ROLE_KEY"]);
+
+  if (envKey) {
+    return envKey.trim();
+  }
+
+  throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Server-side service role key must be configured.");
+}
 
 function getServerSupabase(): SupabaseClient {
-  if (cachedServerClient) return cachedServerClient;
+  const effectiveKey = getActiveServiceRoleKey();
+
+  if (cachedServerClient && cachedServiceKey === effectiveKey) {
+    return cachedServerClient;
+  }
 
   const url =
     (typeof process !== "undefined" && process.env?.["SUPABASE_URL"]) ||
@@ -48,17 +65,7 @@ function getServerSupabase(): SupabaseClient {
     (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["VITE_SUPABASE_URL"]) ||
     "https://plyvtevuxdmzswtvpmwv.supabase.co";
 
-  const serviceRoleKey =
-    (typeof process !== "undefined" && process.env?.["SUPABASE_SERVICE_ROLE_KEY"]) ||
-    (typeof (globalThis as any)?.__SERVER_ENV__ !== "undefined" && (globalThis as any).__SERVER_ENV__?.["SUPABASE_SERVICE_ROLE_KEY"]);
-
-  const effectiveKey = serviceRoleKey;
-  if (!effectiveKey) {
-    throw new Error(
-      "Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Server-side service role key must be configured."
-    );
-  }
-
+  cachedServiceKey = effectiveKey;
   cachedServerClient = createClient(url, effectiveKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -445,6 +452,7 @@ export async function loginAdminCore(data: AdminAuthPayload) {
     return {
       session: authData.session,
       user: authData.user,
+      token: authData.session.access_token,
     };
 }
 
@@ -870,6 +878,18 @@ export interface RegisterStudentPayload {
  * Creates an auto-confirmed Supabase Auth user, synchronizes profiles and students,
  * removes any duplicate placeholder rows, and returns an authenticated session.
  */
+function formatAuthErrorMessage(msg?: string): string {
+  if (!msg) return "Registration failed. Please try again.";
+  if (
+    msg.toLowerCase().includes("unregistered api key") ||
+    msg.toLowerCase().includes("invalid api key") ||
+    msg.toLowerCase().includes("jwt")
+  ) {
+    return "Supabase Authentication Error: The SUPABASE_SERVICE_ROLE_KEY configured in .env is unregistered or was rotated on Supabase project plyvtevuxdmzswtvpmwv. Please paste your current active service_role key from the Supabase Dashboard (Project Settings > API) into .env.";
+  }
+  return msg;
+}
+
 export async function registerStudentCore(data: RegisterStudentPayload) {
   try {
     const supabaseAdmin = getServerSupabase();
@@ -960,7 +980,7 @@ export async function registerStudentCore(data: RegisterStudentPayload) {
       if (updateErr) {
         return {
           success: false,
-          error: updateErr.message || "Failed to update existing student credentials.",
+          error: formatAuthErrorMessage(updateErr.message || "Failed to update existing student credentials."),
           user: null,
           session: null,
         };
@@ -1019,7 +1039,7 @@ export async function registerStudentCore(data: RegisterStudentPayload) {
         if (createError || !createdUser?.user) {
           return {
             success: false,
-            error: createError?.message || "Registration failed. Please try again.",
+            error: formatAuthErrorMessage(createError?.message || "Registration failed. Please try again."),
             user: null,
             session: null,
           };
@@ -1052,7 +1072,7 @@ export async function registerStudentCore(data: RegisterStudentPayload) {
       if (createError || !createdUser?.user) {
         return {
           success: false,
-          error: createError?.message || "Registration failed. Please try again.",
+          error: formatAuthErrorMessage(createError?.message || "Registration failed. Please try again."),
           user: null,
           session: null,
         };
@@ -1189,7 +1209,7 @@ export async function registerStudentCore(data: RegisterStudentPayload) {
     console.warn("registerStudentCore error caught safely:", err);
     return {
       success: false,
-      error: err?.message || "Registration server error. Please try again.",
+      error: formatAuthErrorMessage(err?.message || "Registration server error. Please try again."),
       user: null,
       session: null,
     };
@@ -1386,7 +1406,7 @@ export const adminAddConfirmedStudentServerFn = createServerFn({ method: "POST" 
     if (profile?.role !== "admin") throw new Error("Unauthorized: Only administrators can add student access.");
 
     let cleanCnf = cnfNumber.trim().toUpperCase();
-    if (!cleanCnf.startsWith("CNF-") && !cleanCnf.startsWith("CNF")) {
+    if (!cleanCnf.startsWith("CNF-") && !cleanCnf.startsWith("CNF") && !/^[0-9]{2}[A-Z0-9]+$/i.test(cleanCnf)) {
       cleanCnf = `CNF-${cleanCnf}`;
     }
     const cleanName = fullName.trim();
@@ -1463,150 +1483,270 @@ export const adminAddConfirmedStudentServerFn = createServerFn({ method: "POST" 
 /**
  * Server function: Allows administrators to fetch all students (from DB and confirmed list).
  */
-export const adminGetConfirmedStudentsServerFn = createServerFn({ method: "POST" })
-  .validator((data: { adminToken: string }) => data)
-  .handler(async ({ data }) => {
-    const { adminToken } = data;
-    if (!adminToken) throw new Error("Admin authentication required.");
-    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
-    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+/**
+ * Verifies admin session token and returns an authorized client and admin user id.
+ */
+export async function getAuthorizedAdminClient(adminToken: string): Promise<{ client: SupabaseClient; adminUserId: string }> {
+  if (!adminToken) throw new Error("Admin authentication required.");
+  const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
+  if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
 
-    const serverClient = getServerSupabase();
-    const { data: profile } = await serverClient
+  const serverClient = getServerSupabase();
+  const { data: profile, error: profileError } = await serverClient
+    .from("profiles")
+    .select("role")
+    .eq("id", authData.user.id)
+    .maybeSingle();
+
+  if (profileError || profile?.role !== "admin") {
+    throw new Error("Unauthorized: Administrator privileges required.");
+  }
+
+  const url =
+    (typeof process !== "undefined" && process.env?.["SUPABASE_URL"]) ||
+    (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
+    "https://plyvtevuxdmzswtvpmwv.supabase.co";
+  const anonKey =
+    (typeof process !== "undefined" && process.env?.["SUPABASE_ANON_KEY"]) ||
+    (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_ANON_KEY"]) ||
+    "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb";
+
+  const client = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${adminToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  return { client, adminUserId: authData.user.id };
+}
+
+/**
+ * Resolves a resume file path or folder ID safely from the 'resumes' storage bucket.
+ */
+export async function resolveResumeFile(
+  client: any,
+  resumePath: string
+): Promise<{ exists: boolean; resolvedPath: string | null; signedUrl: string | null }> {
+  if (!resumePath || !resumePath.trim()) {
+    return { exists: false, resolvedPath: null, signedUrl: null };
+  }
+
+  let cleanPath = resumePath.trim();
+  if (cleanPath.startsWith("http://") || cleanPath.startsWith("https://")) {
+    const idx = cleanPath.indexOf("/resumes/");
+    if (idx !== -1) {
+      cleanPath = cleanPath.substring(idx + "/resumes/".length);
+    }
+  }
+  if (cleanPath.startsWith("resumes/")) {
+    cleanPath = cleanPath.replace(/^resumes\//, "");
+  }
+
+  // 1. Direct signed URL attempt on cleanPath
+  const { data: directSigned, error: directErr } = await client.storage
+    .from("resumes")
+    .createSignedUrl(cleanPath, 300);
+
+  if (!directErr && directSigned?.signedUrl) {
+    let resolved = cleanPath;
+    if (!cleanPath.includes("/")) {
+      const { data: files } = await client.storage.from("resumes").list(cleanPath);
+      const validFiles = (files || []).filter((f: any) => f.name && f.name !== ".emptyFolderPlaceholder");
+      if (validFiles.length > 0) {
+        resolved = `${cleanPath}/${validFiles[0].name}`;
+      }
+    }
+    return { exists: true, resolvedPath: resolved, signedUrl: directSigned.signedUrl };
+  }
+
+  // 2. Folder lookup
+  const { data: folderFiles, error: listErr } = await client.storage
+    .from("resumes")
+    .list(cleanPath);
+
+  if (!listErr && folderFiles && folderFiles.length > 0) {
+    const valid = folderFiles.filter((f: any) => f.name && f.name !== ".emptyFolderPlaceholder");
+    if (valid.length > 0) {
+      const fullPath = `${cleanPath}/${valid[0].name}`;
+      const { data: signed } = await client.storage
+        .from("resumes")
+        .createSignedUrl(fullPath, 300);
+      if (signed?.signedUrl) {
+        return { exists: true, resolvedPath: fullPath, signedUrl: signed.signedUrl };
+      }
+    }
+  }
+
+  return { exists: false, resolvedPath: null, signedUrl: null };
+}
+
+/**
+ * Core function: Allows administrators to fetch all students with profile enrichment and pass eligibility.
+ */
+export async function adminGetConfirmedStudentsCore(data: { adminToken: string }) {
+  const { adminToken } = data;
+  if (!adminToken) throw new Error("Admin authentication required.");
+  const { client } = await getAuthorizedAdminClient(adminToken);
+
+  // Fetch database students
+  const { data: dbStudents, error: studErr } = await client
+    .from("students")
+    .select("id, user_id, full_name, team_code, college, mobile, course_branch, graduation_year, created_at, resume_url")
+    .order("created_at", { ascending: false });
+
+  if (studErr) throw new Error(studErr.message);
+
+  // Fetch profiles to get email and additional details
+  const userIds = (dbStudents || []).map((s: any) => s.user_id).filter(Boolean);
+  const profileMap = new Map<string, any>();
+  if (userIds.length > 0) {
+    const { data: profiles } = await client
       .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
+      .select("id, email, full_name, college, branch, graduation_year")
+      .in("id", userIds);
+    (profiles || []).forEach((p: any) => profileMap.set(p.id, p));
+  }
 
-    if (profile?.role !== "admin") throw new Error("Unauthorized.");
-
-    // Fetch database students
-    const { data: dbStudents } = await serverClient
-      .from("students")
-      .select("id, user_id, full_name, team_code, college, mobile, created_at, resume_url")
-      .order("created_at", { ascending: false });
-
+  const enriched = (dbStudents || []).map((s: any) => {
+    const p = s.user_id ? profileMap.get(s.user_id) : undefined;
+    const cnf = s.team_code || "";
     return {
-      dbStudents: dbStudents || [],
+      id: s.id,
+      user_id: s.user_id,
+      full_name: s.full_name || p?.full_name || "",
+      cnf_number: cnf,
+      team_code: cnf,
+      email: p?.email || "",
+      mobile: s.mobile || "",
+      college: s.college || p?.college || "MLR Institute of Technology",
+      branch: s.course_branch || p?.branch || "",
+      graduation_year: s.graduation_year || p?.graduation_year || null,
+      created_at: s.created_at,
+      registration_date: s.created_at,
+      resume_url: s.resume_url || "",
+      is_premium_pass: isCnfEligible(cnf),
     };
   });
 
+  return {
+    dbStudents: enriched,
+  };
+}
+
+export const adminGetConfirmedStudentsServerFn = createServerFn({ method: "POST" })
+  .validator((data: { adminToken: string }) => data)
+  .handler(async ({ data }) => {
+    return await adminGetConfirmedStudentsCore(data);
+  });
+
 /**
- * Server function: Allows administrators to fetch all candidate applications.
+ * Core function: Allows administrators to fetch all candidate applications.
  */
+export async function adminGetApplicationsCore(data: { adminToken: string }) {
+  const { adminToken } = data;
+  if (!adminToken) throw new Error("Admin authentication required.");
+  const { client } = await getAuthorizedAdminClient(adminToken);
+
+  // 1. Fetch applications with internship details
+  let appsData: any[] = [];
+  const { data: rawApps, error: appErr } = await client
+    .from("applications")
+    .select("*, internship:internships(id, role, domain)")
+    .order("created_at", { ascending: false });
+
+  if (!appErr && rawApps) {
+    appsData = rawApps;
+  } else {
+    const { data: fallback } = await client
+      .from("applications")
+      .select("*")
+      .order("created_at", { ascending: false });
+    appsData = fallback || [];
+  }
+
+  // Hydrate internships map
+  const internshipMap = new Map<string, any>();
+  const { data: allInternships } = await client
+    .from("internships")
+    .select("id, role, domain, location, mode, duration, salary");
+
+  (allInternships || []).forEach((item: any) => {
+    internshipMap.set(item.id, item);
+  });
+  INTERNSHIP_COMPANIES.forEach((item) => {
+    if (!internshipMap.has(item.id)) {
+      internshipMap.set(item.id, {
+        id: item.id,
+        role: item.role,
+        domain: item.domain,
+        location: item.mode || "MLRIT Campus",
+        mode: item.mode || "onsite",
+        duration: item.duration || "3 - 6 Months",
+        salary: item.stipend || "Performance Based",
+      });
+    }
+  });
+
+  // 2. Hydrate student details from students and profiles tables
+  const studentIds = Array.from(new Set(appsData.map((a: any) => a.student_id).filter(Boolean)));
+  const [{ data: dbStudents }, { data: dbProfiles }] = await Promise.all([
+    studentIds.length > 0
+      ? client.from("students").select("*").or(`user_id.in.(${studentIds.join(",")}),id.in.(${studentIds.join(",")})`)
+      : Promise.resolve({ data: [] }),
+    studentIds.length > 0
+      ? client.from("profiles").select("id, email, full_name, college, branch, graduation_year").in("id", studentIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const studentMap = new Map<string, any>();
+  (dbStudents || []).forEach((s: any) => {
+    if (s.user_id) studentMap.set(s.user_id, s);
+    if (s.id) studentMap.set(s.id, s);
+  });
+
+  const profileMap = new Map((dbProfiles || []).map((p: any) => [p.id, p]));
+
+  return appsData.map((app: any) => {
+    const s = studentMap.get(app.student_id);
+    const p = profileMap.get(app.student_id) || (s?.user_id ? profileMap.get(s.user_id) : undefined);
+    const roleObj = app.internship || internshipMap.get(app.internship_id) || {
+      id: app.internship_id,
+      role: app.role_title || "Internship Role",
+      domain: "General",
+    };
+
+    const candidateName = app.student_name || s?.full_name || p?.full_name || app.answers?.full_name || "Applicant";
+    const cnfNumber = app.cnf_number || s?.team_code || app.answers?.cnf_number || "CNF";
+    const contactNumber = app.student_phone || s?.mobile || app.answers?.contact_number || "N/A";
+    const email = app.student_email || p?.email || app.answers?.email || "";
+    const college = app.college || s?.college || p?.college || app.answers?.college || "MLR Institute of Technology";
+    const courseBranch = app.course_branch || s?.course_branch || p?.branch || app.answers?.course_branch || "";
+    const graduationYear = s?.graduation_year || p?.graduation_year || null;
+
+    return {
+      ...app,
+      internship: roleObj,
+      skills: app.skills || app.answers?.skills || (Array.isArray(s?.skills) ? s.skills.join(", ") : ""),
+      portfolio_url: app.portfolio_url || app.answers?.portfolio_url || "",
+      video_url: app.video_url || app.answers?.video_url || "",
+      availability: app.availability || app.answers?.availability || "",
+      resume_url: app.resume_url || s?.resume_url || app.answers?.resume_path || "",
+      student: {
+        full_name: candidateName,
+        team_code: cnfNumber,
+        college: college,
+        course_branch: courseBranch,
+        graduation_year: graduationYear,
+        mobile: contactNumber,
+        email: email,
+      },
+    };
+  });
+}
+
 export const adminGetApplicationsServerFn = createServerFn({ method: "POST" })
   .validator((data: { adminToken: string }) => data)
   .handler(async ({ data }) => {
-    const { adminToken } = data;
-    if (!adminToken) throw new Error("Admin authentication required.");
-    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
-    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
-
-    const serverClient = getServerSupabase();
-    const { data: profile } = await serverClient
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
-
-    if (profile?.role !== "admin") throw new Error("Unauthorized.");
-
-    // 1. Fetch applications with internship details
-    let appsData: any[] = [];
-    const { data: rawApps, error: appErr } = await serverClient
-      .from("applications")
-      .select("*, internship:internships(id, role, domain)")
-      .order("created_at", { ascending: false });
-
-    if (!appErr && rawApps) {
-      appsData = rawApps;
-    } else {
-      console.warn("Could not query applications with internship join, querying base applications:", appErr?.message);
-      const { data: fallback } = await serverClient
-        .from("applications")
-        .select("*")
-        .order("created_at", { ascending: false });
-      appsData = fallback || [];
-    }
-
-    // Hydrate internships map for any application missing joined relationship
-    const internshipMap = new Map<string, any>();
-    const { data: allInternships } = await serverClient
-      .from("internships")
-      .select("id, role, domain, location, mode, duration, salary");
-
-    (allInternships || []).forEach((item) => {
-      internshipMap.set(item.id, item);
-    });
-    INTERNSHIP_COMPANIES.forEach((item) => {
-      if (!internshipMap.has(item.id)) {
-        internshipMap.set(item.id, {
-          id: item.id,
-          role: item.role,
-          domain: item.domain,
-          location: item.mode || "MLRIT Campus",
-          mode: item.mode || "onsite",
-          duration: item.duration || "3 - 6 Months",
-          salary: item.stipend || "Performance Based",
-        });
-      }
-    });
-
-    // 2. Hydrate student details from students and profiles tables
-    const studentIds = Array.from(new Set(appsData.map((a) => a.student_id).filter(Boolean)));
-    const [{ data: dbStudents }, { data: dbProfiles }] = await Promise.all([
-      studentIds.length > 0
-        ? serverClient.from("students").select("*").or(`user_id.in.(${studentIds.join(",")}),id.in.(${studentIds.join(",")})`)
-        : Promise.resolve({ data: [] }),
-      studentIds.length > 0
-        ? serverClient.from("profiles").select("id, email, full_name, college, branch, graduation_year").in("id", studentIds)
-        : Promise.resolve({ data: [] }),
-    ]);
-
-    const studentMap = new Map<string, any>();
-    (dbStudents || []).forEach((s) => {
-      if (s.user_id) studentMap.set(s.user_id, s);
-      if (s.id) studentMap.set(s.id, s);
-    });
-
-    const profileMap = new Map((dbProfiles || []).map((p) => [p.id, p]));
-
-    return appsData.map((app) => {
-      const s = studentMap.get(app.student_id);
-      const p = profileMap.get(app.student_id) || (s?.user_id ? profileMap.get(s.user_id) : undefined);
-      const roleObj = app.internship || internshipMap.get(app.internship_id) || {
-        id: app.internship_id,
-        role: app.role_title || "Internship Role",
-        domain: "General",
-      };
-
-      const candidateName = app.student_name || s?.full_name || p?.full_name || app.answers?.full_name || "Applicant";
-      const cnfNumber = app.cnf_number || s?.team_code || app.answers?.cnf_number || "CNF";
-      const contactNumber = app.student_phone || s?.mobile || app.answers?.contact_number || "N/A";
-      const email = app.student_email || p?.email || app.answers?.email || "";
-      const college = app.college || s?.college || p?.college || app.answers?.college || "MLR Institute of Technology";
-      const courseBranch = app.course_branch || s?.course_branch || p?.branch || app.answers?.course_branch || "";
-      const graduationYear = s?.graduation_year || p?.graduation_year || null;
-
-      return {
-        ...app,
-        internship: roleObj,
-        skills: app.skills || app.answers?.skills || (Array.isArray(s?.skills) ? s.skills.join(", ") : ""),
-        portfolio_url: app.portfolio_url || app.answers?.portfolio_url || "",
-        video_url: app.video_url || app.answers?.video_url || "",
-        availability: app.availability || app.answers?.availability || "",
-        resume_url: app.resume_url || s?.resume_url || app.answers?.resume_path || "",
-        student: {
-          full_name: candidateName,
-          team_code: cnfNumber,
-          college: college,
-          course_branch: courseBranch,
-          graduation_year: graduationYear,
-          mobile: contactNumber,
-          email: email,
-        },
-      };
-    });
+    return await adminGetApplicationsCore(data);
   });
 
 export const ALLOWED_APPLICATION_STATUSES = [
@@ -1632,23 +1772,8 @@ export const adminUpdateApplicationStatusServerFn = createServerFn({ method: "PO
   .handler(async ({ data }) => {
     const { adminToken, applicationId, status } = data;
     if (!adminToken) throw new Error("Admin authentication required.");
+    const { client } = await getAuthorizedAdminClient(adminToken);
 
-    // 1. Verify caller session & admin role
-    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
-    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
-
-    const serverClient = getServerSupabase();
-    const { data: profile } = await serverClient
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
-
-    if (profile?.role !== "admin") {
-      throw new Error("Unauthorized: Only administrators can update application status.");
-    }
-
-    // 2. Validate allowed status
     const cleanStatus = status.trim().toLowerCase() as ApplicationStatus;
     if (!ALLOWED_APPLICATION_STATUSES.includes(cleanStatus)) {
       throw new Error(
@@ -1656,21 +1781,7 @@ export const adminUpdateApplicationStatusServerFn = createServerFn({ method: "PO
       );
     }
 
-    // 3. Update application status using admin bearer token to satisfy trigger security
-    const adminUserClient = createClient(
-      (typeof process !== "undefined" && process.env?.["SUPABASE_URL"]) ||
-        (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_URL"]) ||
-        "https://plyvtevuxdmzswtvpmwv.supabase.co",
-      (typeof process !== "undefined" && process.env?.["SUPABASE_ANON_KEY"]) ||
-        (typeof process !== "undefined" && process.env?.["VITE_SUPABASE_ANON_KEY"]) ||
-        "sb_publishable_RCZ5Bq_iBxEUsJqShVgk2g_jl2zPyRb",
-      {
-        global: { headers: { Authorization: `Bearer ${adminToken}` } },
-        auth: { persistSession: false, autoRefreshToken: false },
-      }
-    );
-
-    const { data: updated, error: updateError } = await adminUserClient
+    const { data: updated, error: updateError } = await client
       .from("applications")
       .update({ status: cleanStatus })
       .eq("id", applicationId)
@@ -1678,16 +1789,7 @@ export const adminUpdateApplicationStatusServerFn = createServerFn({ method: "PO
       .single();
 
     if (updateError) {
-      // Fallback: update with serverClient
-      const { data: serverUpdated, error: serverErr } = await serverClient
-        .from("applications")
-        .update({ status: cleanStatus })
-        .eq("id", applicationId)
-        .select()
-        .single();
-
-      if (serverErr) throw new Error(updateError.message || serverErr.message);
-      return serverUpdated;
+      throw new Error(updateError.message);
     }
 
     return updated;
@@ -1706,198 +1808,149 @@ export const adminGetResumeDownloadUrlServerFn = createServerFn({ method: "POST"
     if (!adminToken) throw new Error("Admin authentication required.");
     if (!resumePath) throw new Error("Resume path is missing.");
 
-    // Verify admin authorization
-    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
-    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+    const { client } = await getAuthorizedAdminClient(adminToken);
+    const resolved = await resolveResumeFile(client, resumePath);
 
-    const serverClient = getServerSupabase();
-    const { data: profile } = await serverClient
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
-
-    if (profile?.role !== "admin") throw new Error("Unauthorized.");
-
-    // Normalize storage path: strip any URL domain or bucket-name prefix
-    let cleanPath = resumePath.trim();
-    if (cleanPath.startsWith("http://") || cleanPath.startsWith("https://")) {
-      const idx = cleanPath.indexOf("/resumes/");
-      if (idx !== -1) {
-        cleanPath = cleanPath.substring(idx + "/resumes/".length);
-      }
-    }
-    if (cleanPath.startsWith("resumes/")) {
-      cleanPath = cleanPath.replace(/^resumes\//, "");
+    if (!resolved.exists || !resolved.signedUrl) {
+      throw new Error("Could not find or generate download URL for the requested resume file.");
     }
 
-    // Generate temporary signed URL with 120s TTL
-    const { data: signedData, error: signError } = await serverClient.storage
-      .from("resumes")
-      .createSignedUrl(cleanPath, 120);
-
-    if (signError || !signedData?.signedUrl) {
-      throw new Error(signError?.message || "Could not generate download URL for the resume file.");
-    }
-
-    return { signedUrl: signedData.signedUrl };
+    return { signedUrl: resolved.signedUrl, resolvedPath: resolved.resolvedPath };
   });
 
 /**
- * Server function: Exports all candidate applications into an RFC 4180 compliant CSV string.
+ * Core function: Exports all candidate applications into an RFC 4180 compliant CSV string.
  */
+export async function adminExportApplicationsCsvCore(data: { adminToken: string }) {
+  const { adminToken } = data;
+  if (!adminToken) throw new Error("Admin authentication required.");
+
+  const apps = await adminGetApplicationsCore({ adminToken });
+
+  const escapeCsv = (val: unknown): string => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).trim();
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const headers = [
+    "Candidate Name",
+    "CNF Number",
+    "Contact Number",
+    "Email Address",
+    "College / Institute",
+    "Course and Branch",
+    "Graduation Year",
+    "Preferred Internship Role",
+    "Domain",
+    "Application Status",
+    "Relevant Skills",
+    "Portfolio / Profile URL",
+    "Introduction Video Link",
+    "Availability",
+    "Resume Storage Path",
+    "Application Date",
+  ];
+
+  const rows = apps.map((app: any) => {
+    const s = app.student || {};
+    const internshipInfo = app.internship || {
+      role: app.role_title || "Internship Role",
+      domain: "General",
+    };
+
+    return [
+      escapeCsv(s.full_name || app.student_name || "Applicant"),
+      escapeCsv(s.team_code || app.cnf_number || "CNF"),
+      escapeCsv(s.mobile || app.student_phone || "N/A"),
+      escapeCsv(s.email || app.student_email || ""),
+      escapeCsv(s.college || app.college || "MLR Institute of Technology"),
+      escapeCsv(s.course_branch || app.course_branch || "N/A"),
+      escapeCsv(s.graduation_year || "N/A"),
+      escapeCsv(internshipInfo.role || "Internship Role"),
+      escapeCsv(internshipInfo.domain || "General"),
+      escapeCsv(app.status || "submitted"),
+      escapeCsv(app.skills || ""),
+      escapeCsv(app.portfolio_url || ""),
+      escapeCsv(app.video_url || ""),
+      escapeCsv(app.availability || "Immediate"),
+      escapeCsv(app.resume_url || ""),
+      escapeCsv(
+        app.created_at
+          ? new Date(app.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+          : ""
+      ),
+    ].join(",");
+  });
+
+  const csvContent = [headers.map(escapeCsv).join(","), ...rows].join("\r\n");
+
+  return {
+    csvContent,
+    count: apps.length,
+    filename: `equinox_internship_applications_${new Date().toISOString().slice(0, 10)}.csv`,
+  };
+}
+
 export const adminExportApplicationsCsvServerFn = createServerFn({ method: "POST" })
   .validator((data: { adminToken: string }) => data)
   .handler(async ({ data }) => {
-    const { adminToken } = data;
-    if (!adminToken) throw new Error("Admin authentication required.");
+    return await adminExportApplicationsCsvCore(data);
+  });
 
-    // Verify admin authorization
-    const { data: authData, error: authError } = await getServerAnonClient().auth.getUser(adminToken);
-    if (authError || !authData?.user?.id) throw new Error("Invalid admin session.");
+/**
+ * Core function: Exports all registered students into an RFC 4180 compliant CSV string.
+ */
+export async function adminExportStudentsCsvCore(data: { adminToken: string }) {
+  const { adminToken } = data;
+  if (!adminToken) throw new Error("Admin authentication required.");
+  const { dbStudents } = await adminGetConfirmedStudentsCore({ adminToken });
 
-    const serverClient = getServerSupabase();
-    const { data: profile } = await serverClient
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
+  const escapeCsv = (val: unknown): string => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).trim();
+    return `"${str.replace(/"/g, '""')}"`;
+  };
 
-    if (profile?.role !== "admin") throw new Error("Unauthorized.");
+  const headers = [
+    "Candidate Name",
+    "CNF Number",
+    "Contact Number",
+    "Email Address",
+    "College / Institute",
+    "Course and Branch",
+    "Graduation Year",
+    "Premium Pass Status",
+    "Resume Storage Path",
+    "Registration Date",
+  ];
 
-    // 1. Fetch applications with internships
-    let appsData: any[] = [];
-    const { data: apps, error: appErr } = await serverClient
-      .from("applications")
-      .select("*, internship:internships(id, role, domain)")
-      .order("created_at", { ascending: false });
+  const rows = dbStudents.map((s: any) => [
+    escapeCsv(s.full_name),
+    escapeCsv(s.cnf_number || s.team_code),
+    escapeCsv(s.mobile || "N/A"),
+    escapeCsv(s.email || "N/A"),
+    escapeCsv(s.college || "MLR Institute of Technology"),
+    escapeCsv(s.branch || "N/A"),
+    escapeCsv(s.graduation_year || "N/A"),
+    escapeCsv(s.is_premium_pass ? "Verified Premium Pass" : "General"),
+    escapeCsv(s.resume_url || ""),
+    escapeCsv(s.registration_date || s.created_at || ""),
+  ].join(","));
 
-    if (!appErr && apps) {
-      appsData = apps;
-    } else {
-      const { data: fallback } = await serverClient
-        .from("applications")
-        .select("*")
-        .order("created_at", { ascending: false });
-      appsData = fallback || [];
-    }
+  const csvContent = [headers.map(escapeCsv).join(","), ...rows].join("\r\n");
 
-    const safeApps = appsData;
+  return {
+    csvContent,
+    count: dbStudents.length,
+    filename: `equinox_registered_students_${new Date().toISOString().slice(0, 10)}.csv`,
+  };
+}
 
-    // Hydrate internships map
-    const internshipMap = new Map<string, any>();
-    const { data: allInternships } = await serverClient
-      .from("internships")
-      .select("id, role, domain");
-
-    (allInternships || []).forEach((item) => {
-      internshipMap.set(item.id, item);
-    });
-    INTERNSHIP_COMPANIES.forEach((item) => {
-      if (!internshipMap.has(item.id)) {
-        internshipMap.set(item.id, { id: item.id, role: item.role, domain: item.domain });
-      }
-    });
-
-    // 2. Hydrate student details & profiles bidirectionally
-    const studentIds = Array.from(new Set(safeApps.map((a) => a.student_id).filter(Boolean)));
-    const [{ data: dbStudents }, { data: dbProfiles }] = await Promise.all([
-      studentIds.length > 0
-        ? serverClient.from("students").select("*").or(`user_id.in.(${studentIds.join(",")}),id.in.(${studentIds.join(",")})`)
-        : Promise.resolve({ data: [] }),
-      studentIds.length > 0
-        ? serverClient.from("profiles").select("id, email, full_name, college, branch, graduation_year").in("id", studentIds)
-        : Promise.resolve({ data: [] }),
-    ]);
-
-    const studentMap = new Map<string, any>();
-    (dbStudents || []).forEach((s) => {
-      if (s.user_id) studentMap.set(s.user_id, s);
-      if (s.id) studentMap.set(s.id, s);
-    });
-
-    const profileMap = new Map((dbProfiles || []).map((p) => [p.id, p]));
-
-    // 3. RFC 4180 CSV escaping helper
-    const escapeCsv = (val: unknown): string => {
-      if (val === null || val === undefined) return '""';
-      const str = String(val).trim();
-      return `"${str.replace(/"/g, '""')}"`;
-    };
-
-    const headers = [
-      "Candidate Name",
-      "CNF Number",
-      "Contact Number",
-      "Email Address",
-      "College / Institute",
-      "Course and Branch",
-      "Graduation Year",
-      "Preferred Internship Role",
-      "Domain",
-      "Application Status",
-      "Relevant Skills",
-      "Portfolio / Profile URL",
-      "Introduction Video Link",
-      "Availability",
-      "Resume Storage Path",
-      "Application Date",
-    ];
-
-    const rows = safeApps.map((app) => {
-      const s = studentMap.get(app.student_id);
-      const p = profileMap.get(app.student_id) || (s?.user_id ? profileMap.get(s.user_id) : undefined);
-      const internshipInfo = app.internship || internshipMap.get(app.internship_id) || {
-        role: app.role_title || "Internship Role",
-        domain: "General",
-      };
-
-      const candidateName = app.student_name || s?.full_name || p?.full_name || app.answers?.full_name || "Applicant";
-      const cnfNumber = app.cnf_number || s?.team_code || app.answers?.cnf_number || "CNF";
-      const contactNumber = app.student_phone || s?.mobile || app.answers?.contact_number || "N/A";
-      const email = app.student_email || p?.email || app.answers?.email || "";
-      const college = app.college || s?.college || p?.college || app.answers?.college || "MLR Institute of Technology";
-      const courseBranch = app.course_branch || s?.course_branch || p?.branch || app.answers?.course_branch || "N/A";
-      const graduationYear = s?.graduation_year || p?.graduation_year || "N/A";
-      const roleName = internshipInfo.role || "Internship Role";
-      const domainName = internshipInfo.domain || "General";
-      const status = app.status || "submitted";
-      const skills = app.skills || app.answers?.skills || (Array.isArray(s?.skills) ? s.skills.join(", ") : "");
-      const portfolioUrl = app.portfolio_url || app.answers?.portfolio_url || "";
-      const videoUrl = app.video_url || app.answers?.video_url || "";
-      const availability = app.availability || app.answers?.availability || "Immediate";
-      const resumeStoragePath = app.resume_url || s?.resume_url || app.answers?.resume_path || "";
-      const applicationDate = app.created_at
-        ? new Date(app.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-        : "";
-
-      return [
-        escapeCsv(candidateName),
-        escapeCsv(cnfNumber),
-        escapeCsv(contactNumber),
-        escapeCsv(email),
-        escapeCsv(college),
-        escapeCsv(courseBranch),
-        escapeCsv(graduationYear),
-        escapeCsv(roleName),
-        escapeCsv(domainName),
-        escapeCsv(status),
-        escapeCsv(skills),
-        escapeCsv(portfolioUrl),
-        escapeCsv(videoUrl),
-        escapeCsv(availability),
-        escapeCsv(resumeStoragePath),
-        escapeCsv(applicationDate),
-      ].join(",");
-    });
-
-    const csvContent = [headers.map(escapeCsv).join(","), ...rows].join("\r\n");
-
-    return {
-      csvContent,
-      count: safeApps.length,
-      filename: `equinox_internship_applications_${new Date().toISOString().slice(0, 10)}.csv`,
-    };
+export const adminExportStudentsCsvServerFn = createServerFn({ method: "POST" })
+  .validator((data: { adminToken: string }) => data)
+  .handler(async ({ data }) => {
+    return await adminExportStudentsCsvCore(data);
   });
 
 export const studentGetApplicationsServerFn = createServerFn({ method: "POST" })

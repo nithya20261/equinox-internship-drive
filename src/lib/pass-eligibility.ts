@@ -1,6 +1,6 @@
 import eligibleCnfsData from "@/data/eligible-pass-cnfs.json";
 
-// Set of verified Premium Pass CNFs
+// Set of verified Premium Pass CNFs and Roll Numbers
 const ELIGIBLE_CNF_SET = new Set((eligibleCnfsData as string[]).map((c) => c.toUpperCase()));
 
 export interface EligibilityResult {
@@ -12,7 +12,7 @@ export interface EligibilityResult {
 
 /**
  * Determine CNF candidate from user input.
- * Accepts direct CNF or team code formatted as CNF-XXXXXX or CNF000.
+ * Accepts direct CNF, college roll numbers (e.g. 24R21A0500), or team codes.
  */
 export function resolveCnfFromInput(input: {
   cnfNumber?: string | undefined;
@@ -22,14 +22,17 @@ export function resolveCnfFromInput(input: {
   if (input.cnfNumber && input.cnfNumber.trim()) {
     return input.cnfNumber.trim().toUpperCase();
   }
-  if (input.teamCode && /^CNF(-[0-9A-F]+|\d+)$/i.test(input.teamCode.trim())) {
+  if (
+    input.teamCode &&
+    /^(CNF(-[0-9A-F]+|\d+)|[0-9]{2}[A-Z0-9]+)$/i.test(input.teamCode.trim())
+  ) {
     return input.teamCode.trim().toUpperCase();
   }
   return null;
 }
 
 /**
- * Check whether a CNF identifier holds an eligible Premium Pass.
+ * Check whether a CNF identifier or Roll Number holds an eligible Premium Pass.
  * Fast O(1) set lookup on sanitized identifiers.
  */
 export function isCnfEligible(cnf: string): boolean {
@@ -52,7 +55,7 @@ export function verifyPassEligibility(input: {
   if (!cnf) {
     return {
       allowed: false,
-      reason: "Registration Denied: A valid Confirmation Number (CNF) is required for registration.",
+      reason: "Registration Denied: A valid Confirmation Number (CNF) or Roll Number is required for registration.",
     };
   }
 

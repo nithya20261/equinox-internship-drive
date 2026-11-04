@@ -14,6 +14,7 @@ import {
   adminUpdateApplicationStatusServerFn,
   adminGetResumeDownloadUrlServerFn,
   adminExportApplicationsCsvServerFn,
+  adminExportStudentsCsvServerFn,
   studentGetApplicationsServerFn,
   type ApplicationStatus,
 } from "./server-auth";
@@ -21,6 +22,7 @@ import {
 const RESUME_BUCKET = "resumes";
 
 import { INTERNSHIP_COMPANIES } from "@/data/companies";
+import JSZip from "jszip";
 
 export interface StudentRegistrationInput {
   full_name: string;
@@ -217,7 +219,7 @@ export async function registerStudentWithResume(input: StudentRegistrationInput)
     }
 
     console.error("registerStudentServerFn failed:", err);
-    throw new Error("Registration service is unavailable. Please try again shortly.");
+    throw err;
   }
 
   if (!serverResult?.success || !serverResult?.user) {
@@ -284,7 +286,7 @@ export async function loginStudent(credentials: {
     }
 
     console.error("loginStudentServerFn failed:", err);
-    throw new Error("Login service is unavailable. Please try again shortly.");
+    throw err;
   }
 
   if (result?.session && result?.user) {
@@ -717,6 +719,125 @@ export async function adminExportApplicationsCsv(): Promise<{ count: number; fil
     count: result.count,
     filename: result.filename,
   };
+}
+
+/**
+ * Admin action to export all registered students to CSV and trigger browser download.
+ */
+export async function adminExportStudentsCsv(): Promise<{ count: number; filename: string }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  const result = await adminExportStudentsCsvServerFn({
+    data: { adminToken: session.access_token },
+  });
+
+  if (typeof window !== "undefined") {
+    const blob = new Blob([result.csvContent], { type: "text/csv;charset=utf-8;" });
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.setAttribute("download", result.filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  return {
+    count: result.count,
+    filename: result.filename,
+  };
+}
+
+/**
+ * Admin action to download all application CVs/resumes bundled into a single ZIP archive.
+ * Preserves original file extensions, labels files with candidate CNF, name and role,
+ * and handles duplicates safely without overwriting.
+ */
+export async function adminDownloadAllResumesZip(
+  applications: any[],
+  onProgress?: (progress: { current: number; total: number; filename: string }) => void
+): Promise<{ downloadedCount: number; missingCount: number }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Admin authentication required.");
+  }
+
+  const zip = new JSZip();
+  const folder = zip.folder("equinox_resumes") || zip;
+  let downloadedCount = 0;
+  let missingCount = 0;
+  const usedFilenames = new Map<string, number>();
+
+  for (let i = 0; i < applications.length; i++) {
+    const app = applications[i];
+    const candidateName = (app.student?.full_name || app.student_name || "Applicant").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const cnf = (app.student?.team_code || app.cnf_number || "CNF").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const role = (app.internship?.role || app.role_title || "Role").replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    let downloadUrl = app.resume_download_url;
+    if (!downloadUrl && app.resume_url) {
+      try {
+        downloadUrl = await adminGetResumeDownloadUrl(app.resume_url);
+      } catch {
+        downloadUrl = null;
+      }
+    }
+
+    if (!downloadUrl) {
+      missingCount++;
+      continue;
+    }
+
+    try {
+      const resp = await fetch(downloadUrl);
+      if (!resp.ok) {
+        missingCount++;
+        continue;
+      }
+
+      const blob = await resp.blob();
+      const extMatch = (app.resume_filename || app.resume_url || "").match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/);
+      const ext = extMatch ? `.${extMatch[1]}` : ".pdf";
+
+      let baseName = `${cnf}_${candidateName}_${role}`;
+      let finalName = `${baseName}${ext}`;
+      const count = usedFilenames.get(finalName) || 0;
+      if (count > 0) {
+        finalName = `${baseName}_${count + 1}${ext}`;
+      }
+      usedFilenames.set(finalName, count + 1);
+
+      folder.file(finalName, blob);
+      downloadedCount++;
+      onProgress?.({ current: i + 1, total: applications.length, filename: finalName });
+    } catch {
+      missingCount++;
+    }
+  }
+
+  if (downloadedCount > 0 && typeof window !== "undefined") {
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const blobUrl = URL.createObjectURL(zipBlob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.setAttribute("download", `equinox_internship_resumes_${new Date().toISOString().slice(0, 10)}.zip`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  return { downloadedCount, missingCount };
 }
 
 /**

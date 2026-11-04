@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { getStoredUser } from "@/lib/auth";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { Ticker } from "@/components/site/Ticker";
@@ -36,6 +37,14 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
+  const storedUser = typeof window !== "undefined" ? getStoredUser() : null;
+  const isCurrentAdminPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard/admin");
+  const isAdmin = storedUser?.role === "admin" || isCurrentAdminPath;
+
+  const targetHref = isAdmin ? (storedUser?.role === "admin" ? "/dashboard/admin" : "/login?admin=1") : "/";
+  const targetLabel = isAdmin ? "Return to Admin Console" : "Go home";
+
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4">
       <div className="max-w-md text-center">
@@ -52,7 +61,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
           >
             Try again
           </button>
-          <a href="/" className="btn btn-line">Go home</a>
+          <a href={targetHref} className="btn btn-line">{targetLabel}</a>
         </div>
       </div>
     </div>

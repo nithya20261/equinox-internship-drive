@@ -1,8 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect, type FormEvent } from "react";
+import { createFileRoute, Link, type ErrorComponentProps } from "@tanstack/react-router";
+import { useState, useEffect, useMemo, type FormEvent } from "react";
 import { DashboardShell, type DashSection } from "@/components/dashboard/DashboardShell";
 import {
-  Lock,
   ShieldAlert,
   ArrowLeft,
   Plus,
@@ -21,6 +20,13 @@ import {
   X,
   Download,
   FileText,
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Archive,
+  Eye,
+  Filter,
+  ArrowUpDown,
 } from "lucide-react";
 import { Container } from "@/components/site/primitives";
 import { useAuth } from "@/lib/auth";
@@ -34,8 +40,45 @@ import {
   adminUpdateApplicationStatus,
   adminGetResumeDownloadUrl,
   adminExportApplicationsCsv,
+  adminExportStudentsCsv,
+  adminDownloadAllResumesZip,
 } from "@/lib/api";
 import { INTERNSHIP_CATEGORIES } from "@/data/site";
+
+function AdminErrorComponent({ error, reset }: ErrorComponentProps) {
+  return (
+    <Container className="py-20 text-center">
+      <div className="mx-auto max-w-lg border border-red-500/30 bg-[#0A0A0A] p-8 text-center rounded-2xl shadow-xl">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center border border-red-500/50 bg-red-950/20 text-red-400 rounded-full">
+          <AlertCircle className="h-7 w-7" />
+        </div>
+        <p className="eyebrow mt-4 text-red-400">Admin Console Error</p>
+        <h1 className="headline mt-2 text-2xl text-[#F7F2F6]">
+          Unable to Load Admin Console
+        </h1>
+        <p className="mt-3 text-xs font-mono text-[#F7F2F6]/70 leading-relaxed bg-[#151515] p-3 rounded-lg border border-white/10 text-left overflow-x-auto">
+          {(error as any)?.message || "An unexpected error occurred while loading the administrator console."}
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <button
+            onClick={() => {
+              reset();
+            }}
+            className="btn btn-signal text-xs"
+          >
+            Try again
+          </button>
+          <Link to="/login" search={{ admin: true }} className="btn btn-line text-xs">
+            Admin Login
+          </Link>
+          <Link to="/" className="btn btn-line text-xs">
+            Return to Homepage
+          </Link>
+        </div>
+      </div>
+    </Container>
+  );
+}
 
 export const Route = createFileRoute("/dashboard/admin")({
   head: () => ({
@@ -44,6 +87,7 @@ export const Route = createFileRoute("/dashboard/admin")({
       { name: "robots", content: "noindex" },
     ],
   }),
+  errorComponent: AdminErrorComponent,
   component: AdminConsole,
 });
 
@@ -89,10 +133,15 @@ function AdminConsole() {
   const [roleSuccess, setRoleSuccess] = useState<string | null>(null);
   const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
 
-  // Students & CNF state
+  // Students state
   const [dbStudents, setDbStudents] = useState<any[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [studentSearch, setStudentSearch] = useState("");
+  const [studentFilter, setStudentFilter] = useState<"all" | "premium" | "general" | "has_resume" | "no_resume">("all");
+  const [studentSort, setStudentSort] = useState<"date_desc" | "date_asc" | "name_asc" | "name_desc" | "cnf_asc">("date_desc");
+  const [studentPage, setStudentPage] = useState(1);
+  const [studentPageSize, setStudentPageSize] = useState(25);
+  const [isExportingStudentsCsv, setIsExportingStudentsCsv] = useState(false);
   const [cnfModalOpen, setCnfModalOpen] = useState(false);
   const [cnfForm, setCnfForm] = useState({
     cnfNumber: "",
@@ -108,20 +157,31 @@ function AdminConsole() {
   const [applications, setApplications] = useState<any[]>([]);
   const [loadingApps, setLoadingApps] = useState(true);
   const [appSearch, setAppSearch] = useState("");
+  const [appStatusFilter, setAppStatusFilter] = useState<string>("all");
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState<{ current: number; total: number; filename: string } | null>(null);
+  const [selectedAppModal, setSelectedAppModal] = useState<any | null>(null);
   const [appOperationMsg, setAppOperationMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Data loading error states
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [studentsError, setStudentsError] = useState<string | null>(null);
+  const [appsError, setAppsError] = useState<string | null>(null);
 
   const isAuthorized = isAdmin && user?.role === "admin";
 
   const fetchRoles = async () => {
     try {
       setLoadingRoles(true);
+      setRolesError(null);
       const data = await adminGetRoles();
       setRoles(data || []);
     } catch (err: any) {
       console.warn("Error loading admin roles:", err);
+      setRolesError(err?.message || "Failed to load internship roles from database.");
     } finally {
       setLoadingRoles(false);
     }
@@ -130,10 +190,12 @@ function AdminConsole() {
   const fetchStudents = async () => {
     try {
       setLoadingStudents(true);
+      setStudentsError(null);
       const res = await adminGetConfirmedStudents();
       setDbStudents(res?.dbStudents || []);
     } catch (err: any) {
       console.warn("Error loading confirmed students:", err);
+      setStudentsError(err?.message || "Failed to load confirmed students from database.");
     } finally {
       setLoadingStudents(false);
     }
@@ -142,10 +204,12 @@ function AdminConsole() {
   const fetchApplications = async () => {
     try {
       setLoadingApps(true);
+      setAppsError(null);
       const data = await adminGetApplications();
       setApplications(data || []);
     } catch (err: any) {
       console.warn("Error loading applications:", err);
+      setAppsError(err?.message || "Failed to load candidate applications from database.");
     } finally {
       setLoadingApps(false);
     }
@@ -158,6 +222,113 @@ function AdminConsole() {
       fetchApplications();
     }
   }, [isAuthorized]);
+
+  // Reset page when filter or search changes
+  useEffect(() => {
+    setStudentPage(1);
+  }, [studentSearch, studentFilter, studentPageSize]);
+
+  // --- Students Filter & Sort & Pagination Logic (Top-level hooks before conditional returns) ---
+  const processedStudents = useMemo(() => {
+    let list = [...dbStudents];
+
+    // Filter by category
+    if (studentFilter === "premium") {
+      list = list.filter((s) => s.is_premium_pass === true);
+    } else if (studentFilter === "general") {
+      list = list.filter((s) => s.is_premium_pass !== true);
+    } else if (studentFilter === "has_resume") {
+      list = list.filter((s) => Boolean(s.resume_url));
+    } else if (studentFilter === "no_resume") {
+      list = list.filter((s) => !s.resume_url);
+    }
+
+    // Search
+    const q = studentSearch.toLowerCase().trim();
+    if (q) {
+      list = list.filter((s) => {
+        const name = (s.full_name || "").toLowerCase();
+        const cnf = (s.cnf_number || s.team_code || "").toLowerCase();
+        const email = (s.email || "").toLowerCase();
+        const mobile = (s.mobile || "").toLowerCase();
+        const college = (s.college || "").toLowerCase();
+        const branch = (s.branch || "").toLowerCase();
+        return (
+          name.includes(q) ||
+          cnf.includes(q) ||
+          email.includes(q) ||
+          mobile.includes(q) ||
+          college.includes(q) ||
+          branch.includes(q)
+        );
+      });
+    }
+
+    // Sort
+    list.sort((a, b) => {
+      if (studentSort === "date_desc") {
+        const tA = new Date(a.created_at || a.registration_date || 0).getTime();
+        const tB = new Date(b.created_at || b.registration_date || 0).getTime();
+        return tB - tA;
+      }
+      if (studentSort === "date_asc") {
+        const tA = new Date(a.created_at || a.registration_date || 0).getTime();
+        const tB = new Date(b.created_at || b.registration_date || 0).getTime();
+        return tA - tB;
+      }
+      if (studentSort === "name_asc") {
+        return (a.full_name || "").localeCompare(b.full_name || "");
+      }
+      if (studentSort === "name_desc") {
+        return (b.full_name || "").localeCompare(a.full_name || "");
+      }
+      if (studentSort === "cnf_asc") {
+        return (a.cnf_number || a.team_code || "").localeCompare(b.cnf_number || b.team_code || "");
+      }
+      return 0;
+    });
+
+    return list;
+  }, [dbStudents, studentFilter, studentSearch, studentSort]);
+
+  const totalStudentPages = Math.ceil(processedStudents.length / studentPageSize) || 1;
+  const paginatedStudents = useMemo(() => {
+    const start = (studentPage - 1) * studentPageSize;
+    return processedStudents.slice(start, start + studentPageSize);
+  }, [processedStudents, studentPage, studentPageSize]);
+
+  // --- Filtered Applications (Top-level hook before conditional returns) ---
+  const filteredApps = useMemo(() => {
+    let list = [...applications];
+
+    if (appStatusFilter !== "all") {
+      list = list.filter((a) => (a.status || "submitted").toLowerCase() === appStatusFilter.toLowerCase());
+    }
+
+    const q = appSearch.toLowerCase().trim();
+    if (q) {
+      list = list.filter((app) => {
+        const sName = (app.student?.full_name || app.student_name || "").toLowerCase();
+        const sCnf = (app.student?.team_code || app.cnf_number || "").toLowerCase();
+        const sEmail = (app.student?.email || app.student_email || "").toLowerCase();
+        const sPhone = (app.student?.mobile || app.student_phone || "").toLowerCase();
+        const rRole = (app.internship?.role || app.role_title || "").toLowerCase();
+        const rDomain = (app.internship?.domain || "").toLowerCase();
+        const skills = (app.skills || "").toLowerCase();
+        return (
+          sName.includes(q) ||
+          sCnf.includes(q) ||
+          sEmail.includes(q) ||
+          sPhone.includes(q) ||
+          rRole.includes(q) ||
+          rDomain.includes(q) ||
+          skills.includes(q)
+        );
+      });
+    }
+
+    return list;
+  }, [applications, appStatusFilter, appSearch]);
 
   if (loading) {
     return (
@@ -384,6 +555,27 @@ function AdminConsole() {
     }
   };
 
+  // --- Students Export ---
+  const handleExportStudentsCsv = async () => {
+    try {
+      setIsExportingStudentsCsv(true);
+      setAppOperationMsg(null);
+      const res = await adminExportStudentsCsv();
+      setAppOperationMsg({
+        type: "success",
+        text: `Successfully exported ${res.count} student registration record(s) to CSV.`,
+      });
+      setTimeout(() => setAppOperationMsg(null), 4000);
+    } catch (err: any) {
+      setAppOperationMsg({
+        type: "error",
+        text: err?.message || "Failed to export students CSV.",
+      });
+    } finally {
+      setIsExportingStudentsCsv(false);
+    }
+  };
+
   // --- Applications Handlers ---
   const handleStatusChange = async (applicationId: string, newStatus: string) => {
     try {
@@ -448,49 +640,30 @@ function AdminConsole() {
     }
   };
 
-  // Combined confirmed students list (pre-loaded 202 + any dynamically added in DB)
-  const dbCnfMap = new Map<string, any>();
-  dbStudents.forEach((s) => {
-    if (s.team_code) {
-      dbCnfMap.set(s.team_code.toUpperCase(), s);
+  const handleDownloadAllResumesZip = async () => {
+    if (applications.length === 0) return;
+    try {
+      setIsDownloadingZip(true);
+      setZipProgress(null);
+      setAppOperationMsg(null);
+      const res = await adminDownloadAllResumesZip(applications, (prog: any) => {
+        setZipProgress(prog);
+      });
+      setAppOperationMsg({
+        type: "success",
+        text: `CV Archive complete: ${res.downloadedCount} CV(s) downloaded into ZIP${res.missingCount > 0 ? ` (${res.missingCount} missing from storage)` : ""}.`,
+      });
+      setTimeout(() => setAppOperationMsg(null), 5000);
+    } catch (err: any) {
+      setAppOperationMsg({
+        type: "error",
+        text: err?.message || "Failed to download resume ZIP archive.",
+      });
+    } finally {
+      setIsDownloadingZip(false);
+      setZipProgress(null);
     }
-  });
-
-  const combinedStudentsList: Array<{
-    cnf: string;
-    name: string;
-    college: string;
-    mobile?: string;
-    isCustom?: boolean;
-    resumeUrl?: string;
-  }> = [];
-
-  // Add DB students first (most recently added)
-  dbStudents.forEach((s) => {
-    combinedStudentsList.push({
-      cnf: (s.team_code || "CNF").toUpperCase(),
-      name: s.full_name || "Applicant",
-      college: s.college || "MLR Institute of Technology",
-      mobile: s.mobile || "N/A",
-      isCustom: true,
-      resumeUrl: s.resume_url,
-    });
-  });
-
-  const filteredStudents = combinedStudentsList.filter((s) => {
-    const q = studentSearch.toLowerCase().trim();
-    if (!q) return true;
-    return s.cnf.toLowerCase().includes(q) || s.name.toLowerCase().includes(q);
-  });
-
-  const filteredApps = applications.filter((app) => {
-    const q = appSearch.toLowerCase().trim();
-    if (!q) return true;
-    const sName = app.student?.full_name?.toLowerCase() || "";
-    const sCnf = app.student?.team_code?.toLowerCase() || "";
-    const rName = app.internship?.role?.toLowerCase() || "";
-    return sName.includes(q) || sCnf.includes(q) || rName.includes(q);
-  });
+  };
 
   const allCategories = [
     ...INTERNSHIP_CATEGORIES.technical,
@@ -526,6 +699,22 @@ function AdminConsole() {
               <Plus size={16} /> Add New Role
             </button>
           </div>
+
+          {rolesError && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-950/20 p-4 text-xs font-mono text-red-300">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="shrink-0 text-red-400" />
+                <span>{rolesError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchRoles}
+                className="btn btn-line h-8 px-3 text-xs"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* Roles Grid / Table */}
           {loadingRoles ? (
@@ -664,97 +853,285 @@ function AdminConsole() {
     },
     {
       key: "students",
-      label: `Students & CNF Access (${combinedStudentsList.length})`,
-      empty: "Registered candidates and confirmed CNF access records.",
+      label: `Registered Students (${dbStudents.length})`,
+      empty: "Registered candidate records from Supabase will appear here.",
       content: (
         <div className="space-y-6">
-          {/* Header Banner & Add CNF Trigger */}
+          {/* Header Banner & Global Actions */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-white/20 bg-[#151515] p-5 shadow-sm">
             <div>
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#7484FE]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#33FF67]" />
                 <h3 className="font-mono text-sm font-bold text-[#F7F2F6] uppercase tracking-wider">
-                  Confirmed Student Access Master Control
+                  Live Supabase Student Registrations
                 </h3>
               </div>
               <p className="mt-1 text-xs text-[#F7F2F6]/60">
-                All students below can log in at <code>/login</code> using their CNF number as both their <strong>Confirmation Number</strong> and <strong>Password</strong>.
+                <strong>{dbStudents.length}</strong> registered students loaded from Supabase. {dbStudents.filter(s => s.is_premium_pass).length} hold verified Premium Passes.
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                setCnfModalOpen(true);
-                setCnfError(null);
-                setCnfSuccess(null);
-              }}
-              className="btn btn-signal flex items-center gap-2 px-4 py-2.5 text-xs font-bold"
-            >
-              <Plus size={16} /> Add New CNF Access
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={fetchStudents}
+                disabled={loadingStudents}
+                className="btn btn-line h-9 px-3 text-xs font-mono inline-flex items-center gap-1.5"
+                title="Refresh student records from Supabase"
+              >
+                <RefreshCw size={13} className={loadingStudents ? "animate-spin text-[#33FF67]" : ""} />
+                <span>Refresh</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportStudentsCsv}
+                disabled={isExportingStudentsCsv || dbStudents.length === 0}
+                className="btn btn-signal h-9 px-4 text-xs font-mono inline-flex items-center gap-2"
+              >
+                {isExportingStudentsCsv ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    <span>Export Students CSV ({dbStudents.length})</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setCnfModalOpen(true);
+                  setCnfError(null);
+                  setCnfSuccess(null);
+                }}
+                className="btn border border-[#7484FE]/40 bg-[#7484FE]/10 text-[#7484FE] hover:bg-[#7484FE]/20 h-9 px-3.5 text-xs font-mono font-bold inline-flex items-center gap-1.5"
+              >
+                <Plus size={14} /> Add CNF
+              </button>
+            </div>
           </div>
 
-          {/* Quick Search */}
-          <div className="flex items-center gap-3">
+          {studentsError && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-950/20 p-4 text-xs font-mono text-red-300">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="shrink-0 text-red-400" />
+                <span>{studentsError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchStudents}
+                className="btn btn-line h-8 px-3 text-xs"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* Search, Filter, Sort and Page-size toolbar */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+            {/* Search Input */}
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
               <input
                 type="text"
                 value={studentSearch}
                 onChange={(e) => setStudentSearch(e.target.value)}
-                placeholder="Search students by CNF Number or Name..."
-                className="w-full rounded-xl border border-white/20 bg-[#121212] py-2.5 pl-10 pr-4 font-mono text-xs text-white placeholder:text-white/40 outline-none focus:border-[#7484FE]"
+                placeholder="Search by full name, CNF number, email, mobile, college, branch..."
+                className="w-full rounded-xl border border-white/20 bg-[#121212] py-2.5 pl-10 pr-9 font-mono text-xs text-white placeholder:text-white/40 outline-none focus:border-[#7484FE]"
               />
+              {studentSearch && (
+                <button
+                  type="button"
+                  onClick={() => setStudentSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-            <span className="font-mono text-xs text-white/50 shrink-0">
-              Showing {filteredStudents.length} of {combinedStudentsList.length}
-            </span>
+
+            {/* Filter Dropdown */}
+            <div className="flex items-center gap-2 shrink-0">
+              <Filter size={14} className="text-white/50" />
+              <select
+                aria-label="Filter students by status"
+                value={studentFilter}
+                onChange={(e) => setStudentFilter(e.target.value as any)}
+                className="rounded-xl border border-white/20 bg-[#121212] px-3 py-2 font-mono text-xs text-white outline-none focus:border-[#7484FE] cursor-pointer"
+              >
+                <option value="all">All Registrations ({dbStudents.length})</option>
+                <option value="premium">Verified Premium Pass ({dbStudents.filter(s => s.is_premium_pass).length})</option>
+                <option value="general">General / Unverified ({dbStudents.filter(s => !s.is_premium_pass).length})</option>
+                <option value="has_resume">With Resume on File ({dbStudents.filter(s => Boolean(s.resume_url)).length})</option>
+                <option value="no_resume">Without Resume ({dbStudents.filter(s => !s.resume_url).length})</option>
+              </select>
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-2 shrink-0">
+              <ArrowUpDown size={14} className="text-white/50" />
+              <select
+                aria-label="Sort students list"
+                value={studentSort}
+                onChange={(e) => setStudentSort(e.target.value as any)}
+                className="rounded-xl border border-white/20 bg-[#121212] px-3 py-2 font-mono text-xs text-white outline-none focus:border-[#7484FE] cursor-pointer"
+              >
+                <option value="date_desc">Newest First</option>
+                <option value="date_asc">Oldest First</option>
+                <option value="name_asc">Name (A → Z)</option>
+                <option value="name_desc">Name (Z → A)</option>
+                <option value="cnf_asc">CNF Number</option>
+              </select>
+            </div>
+
+            {/* Page Size Selector */}
+            <div className="shrink-0">
+              <select
+                aria-label="Items per page"
+                value={studentPageSize}
+                onChange={(e) => setStudentPageSize(Number(e.target.value))}
+                className="rounded-xl border border-white/20 bg-[#121212] px-3 py-2 font-mono text-xs text-white outline-none focus:border-[#7484FE] cursor-pointer"
+              >
+                <option value="10">10 / page</option>
+                <option value="25">25 / page</option>
+                <option value="50">50 / page</option>
+                <option value="100">100 / page</option>
+              </select>
+            </div>
           </div>
 
           {/* Students Table */}
-          <div className="overflow-x-auto rounded-xl border border-white/15 bg-[#181818]">
-            <table className="w-full text-left text-xs font-sans">
-              <thead className="border-b border-white/15 bg-[#121212] font-mono text-[11px] text-[#7484FE] uppercase">
-                <tr>
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">CNF Number</th>
-                  <th className="px-4 py-3">Student Name</th>
-                  <th className="px-4 py-3">Login Password</th>
-                  <th className="px-4 py-3">Institution</th>
-                  <th className="px-4 py-3">Access Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10 font-mono">
-                {filteredStudents.slice(0, 100).map((s, idx) => (
-                  <tr key={s.cnf} className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3 text-white/40">{idx + 1}</td>
-                    <td className="px-4 py-3 font-bold text-[#33FF67] tracking-wider">
-                      {s.cnf}
-                    </td>
-                    <td className="px-4 py-3 font-sans font-semibold text-white">
-                      {s.name}
-                    </td>
-                    <td className="px-4 py-3 text-[#7484FE]">
-                      Same as CNF ({s.cnf})
-                    </td>
-                    <td className="px-4 py-3 font-sans text-white/70">
-                      {s.college}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#33FF67]/30 bg-[#33FF67]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#33FF67]">
-                        <CheckCircle2 size={11} /> Granted
-                      </span>
-                    </td>
+          {loadingStudents ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-[#33FF67]" />
+            </div>
+          ) : paginatedStudents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-white/20 p-12 text-center text-white/50 text-xs font-mono">
+              No student registration records match the current filter and search criteria.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-white/15 bg-[#181818]">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="border-b border-white/15 bg-[#121212] font-mono text-[11px] text-[#7484FE] uppercase">
+                  <tr>
+                    <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Candidate & Email</th>
+                    <th className="px-4 py-3">CNF Number</th>
+                    <th className="px-4 py-3">Pass Verification</th>
+                    <th className="px-4 py-3">Institution & Branch</th>
+                    <th className="px-4 py-3">Contact</th>
+                    <th className="px-4 py-3">Registration Date</th>
+                    <th className="px-4 py-3">Resume</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {filteredStudents.length > 100 && (
-              <div className="border-t border-white/10 bg-[#121212] p-3 text-center font-mono text-xs text-white/50">
-                Showing first 100 of {filteredStudents.length} students. Use search to filter specific records.
+                </thead>
+                <tbody className="divide-y divide-white/10 font-mono">
+                  {paginatedStudents.map((s, idx) => {
+                    const rowNumber = (studentPage - 1) * studentPageSize + idx + 1;
+                    const dateFormatted = s.created_at || s.registration_date
+                      ? new Date(s.created_at || s.registration_date).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "—";
+
+                    return (
+                      <tr key={s.id || s.user_id || idx} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3 text-white/40">{rowNumber}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-sans font-bold text-white text-xs">
+                            {s.full_name || "Applicant"}
+                          </div>
+                          {s.email && (
+                            <div className="font-mono text-[11px] text-white/50 truncate max-w-[200px]" title={s.email}>
+                              {s.email}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-[#33FF67] tracking-wider">
+                          {s.cnf_number || s.team_code || "N/A"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.is_premium_pass ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#33FF67]/30 bg-[#33FF67]/10 px-2 py-0.5 text-[10px] font-bold text-[#33FF67]">
+                              <ShieldCheck size={11} /> Verified Premium
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                              General / Unverified
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-sans text-white/80">
+                          <div className="truncate max-w-[180px]" title={s.college}>
+                            {s.college || "MLRIT"}
+                          </div>
+                          {(s.branch || s.course_branch) && (
+                            <div className="text-[11px] text-white/50 truncate max-w-[180px]">
+                              {s.branch || s.course_branch}
+                              {s.graduation_year ? ` ('${String(s.graduation_year).slice(-2)})` : ""}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-white/70">
+                          {s.mobile && s.mobile !== "N/A" ? s.mobile : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-white/60 text-[11px]">
+                          {dateFormatted}
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.resume_url ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-[#33FF67]" title={s.resume_url}>
+                              <FileCheck size={12} /> On File
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-white/30">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Pagination Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/10 bg-[#121212] px-4 py-3 font-mono text-xs">
+                <span className="text-white/50">
+                  Showing {(studentPage - 1) * studentPageSize + 1} to{" "}
+                  {Math.min(studentPage * studentPageSize, processedStudents.length)} of{" "}
+                  {processedStudents.length} students
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={studentPage <= 1}
+                    onClick={() => setStudentPage((p) => Math.max(1, p - 1))}
+                    className="btn btn-line h-8 px-2.5 text-xs disabled:opacity-40"
+                  >
+                    <ChevronLeft size={14} /> Previous
+                  </button>
+
+                  <span className="text-white/80 px-2">
+                    Page <strong>{studentPage}</strong> of <strong>{totalStudentPages}</strong>
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={studentPage >= totalStudentPages}
+                    onClick={() => setStudentPage((p) => Math.min(totalStudentPages, p + 1))}
+                    className="btn btn-line h-8 px-2.5 text-xs disabled:opacity-40"
+                  >
+                    Next <ChevronRight size={14} />
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       ),
     },
@@ -764,23 +1141,54 @@ function AdminConsole() {
       empty: "Candidate applications submitted for internship roles will appear here.",
       content: (
         <div className="space-y-6">
+          {/* Header Banner & Global Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-white/20 bg-[#151515] p-5 shadow-sm">
             <div>
-              <h3 className="font-mono text-sm font-bold text-[#F7F2F6] uppercase tracking-wider">
-                Candidate Applications Live Feed
-              </h3>
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#33FF67] animate-pulse" />
+                <h3 className="font-mono text-sm font-bold text-[#F7F2F6] uppercase tracking-wider">
+                  Candidate Applications Live Feed
+                </h3>
+              </div>
               <p className="mt-1 text-xs text-[#F7F2F6]/60">
-                Review, update statuses, securely view resumes, and export candidate data.
+                <strong>{applications.length}</strong> total application(s) across roles. Multi-role submissions are tracked independently.
               </p>
             </div>
+
             <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={fetchApplications}
+                disabled={loadingApps}
                 className="btn btn-line h-9 px-3 text-xs font-mono inline-flex items-center gap-1.5"
+                title="Refresh application feed"
               >
-                <RefreshCw size={13} /> Refresh
+                <RefreshCw size={13} className={loadingApps ? "animate-spin text-[#33FF67]" : ""} />
+                <span>Refresh</span>
               </button>
+
+              <button
+                type="button"
+                disabled={isDownloadingZip || applications.length === 0}
+                onClick={handleDownloadAllResumesZip}
+                className="btn border border-[#7484FE]/40 bg-[#7484FE]/10 text-[#7484FE] hover:bg-[#7484FE]/20 h-9 px-3.5 text-xs font-mono font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+                title="Download all candidate resumes bundled into a single ZIP file"
+              >
+                {isDownloadingZip ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>
+                      {zipProgress ? `Bundling ${zipProgress.current}/${zipProgress.total}...` : "Creating ZIP..."}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Archive size={14} />
+                    <span>Download All CVs (ZIP)</span>
+                  </>
+                )}
+              </button>
+
               <button
                 type="button"
                 disabled={isExportingCsv || applications.length === 0}
@@ -795,12 +1203,28 @@ function AdminConsole() {
                 ) : (
                   <>
                     <Download size={14} />
-                    <span>Export CSV ({filteredApps.length})</span>
+                    <span>Export Applications CSV ({filteredApps.length})</span>
                   </>
                 )}
               </button>
             </div>
           </div>
+
+          {appsError && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-950/20 p-4 text-xs font-mono text-red-300">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="shrink-0 text-red-400" />
+                <span>{appsError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchApplications}
+                className="btn btn-line h-8 px-3 text-xs"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* Operation notification banner */}
           {appOperationMsg && (
@@ -820,16 +1244,36 @@ function AdminConsole() {
             </div>
           )}
 
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-            <input
-              type="text"
-              value={appSearch}
-              onChange={(e) => setAppSearch(e.target.value)}
-              placeholder="Search by candidate name, CNF, email, or applied role..."
-              className="w-full rounded-xl border border-white/20 bg-[#121212] py-2.5 pl-10 pr-4 font-mono text-xs text-white placeholder:text-white/40 outline-none focus:border-[#7484FE]"
-            />
+          {/* Search bar & Status Filter Row */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+              <input
+                type="text"
+                value={appSearch}
+                onChange={(e) => setAppSearch(e.target.value)}
+                placeholder="Search by candidate name, CNF, email, phone, role, domain, or skills..."
+                className="w-full rounded-xl border border-white/20 bg-[#121212] py-2.5 pl-10 pr-4 font-mono text-xs text-white placeholder:text-white/40 outline-none focus:border-[#7484FE]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Filter size={14} className="text-white/50" />
+              <select
+                aria-label="Filter applications by status"
+                value={appStatusFilter}
+                onChange={(e) => setAppStatusFilter(e.target.value)}
+                className="rounded-xl border border-white/20 bg-[#121212] px-3 py-2 font-mono text-xs text-white outline-none focus:border-[#7484FE] cursor-pointer"
+              >
+                <option value="all">All Statuses ({applications.length})</option>
+                <option value="submitted">Submitted</option>
+                <option value="under_review">Under Review</option>
+                <option value="shortlisted">Shortlisted</option>
+                <option value="interview_scheduled">Interview Scheduled</option>
+                <option value="selected">Selected</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
           </div>
 
           {loadingApps ? (
@@ -838,157 +1282,189 @@ function AdminConsole() {
             </div>
           ) : filteredApps.length === 0 ? (
             <div className="rounded-xl border border-dashed border-white/20 p-12 text-center text-white/50 text-xs font-mono">
-              No candidate applications matching your search criteria.
+              No candidate applications match the selected status and search criteria.
             </div>
           ) : (
             <div className="grid gap-3">
-              {filteredApps.map((app) => (
-                <div
-                  key={app.id}
-                  className="rounded-xl border border-white/15 bg-[#181818] p-5 flex flex-col md:flex-row md:items-start justify-between gap-5 hover:border-white/25 transition-colors"
-                >
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono font-bold text-xs text-[#33FF67]">
-                        {app.student?.team_code || "CNF"}
-                      </span>
-                      <strong className="text-white font-sans text-sm">
-                        {app.student?.full_name || "Applicant"}
-                      </strong>
-                      {app.student?.email && (
-                        <span className="font-mono text-[11px] text-white/50">
-                          ({app.student.email})
+              {filteredApps.map((app) => {
+                const sName = app.student?.full_name || app.student_name || "Applicant";
+                const sCnf = app.student?.team_code || app.cnf_number || "CNF";
+                const sEmail = app.student?.email || app.student_email || "";
+                const sPhone = app.student?.mobile || app.student_phone || "";
+                const rRole = app.internship?.role || app.role_title || "Internship Role";
+                const rDomain = app.internship?.domain || "General";
+                const college = app.student?.college || app.college || "MLRIT";
+                const branch = app.student?.course_branch || app.course_branch || "";
+                const gradYear = app.student?.graduation_year || "";
+                const isResumeAvailable = app.resume_status === "available" || Boolean(app.resume_download_url || app.resume_url);
+
+                return (
+                  <div
+                    key={app.id}
+                    className="rounded-xl border border-white/15 bg-[#181818] p-5 flex flex-col md:flex-row md:items-start justify-between gap-5 hover:border-white/25 transition-colors"
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-[#33FF67]">
+                          {sCnf}
                         </span>
-                      )}
-                    </div>
+                        <strong className="text-white font-sans text-sm">
+                          {sName}
+                        </strong>
+                        {sEmail && (
+                          <span className="font-mono text-[11px] text-white/50">
+                            ({sEmail})
+                          </span>
+                        )}
+                      </div>
 
-                    <p className="text-xs text-[#7484FE] font-mono">
-                      Applied for: <strong>{app.internship?.role || "Internship Role"}</strong> ({app.internship?.domain || "General"})
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/70 font-sans">
-                      <span>College: <strong>{app.student?.college || "MLRIT"}</strong></span>
-                      {app.student?.course_branch && (
-                        <>
-                          <span>•</span>
-                          <span>Branch: <strong>{app.student.course_branch}</strong></span>
-                        </>
-                      )}
-                      {app.student?.graduation_year && (
-                        <>
-                          <span>•</span>
-                          <span>Grad Year: <strong>{app.student.graduation_year}</strong></span>
-                        </>
-                      )}
-                      <span>•</span>
-                      <span>Mobile: <strong>{app.student?.mobile || "N/A"}</strong></span>
-                      {app.availability && (
-                        <>
-                          <span>•</span>
-                          <span className="text-[#33FF67]">Availability: {app.availability}</span>
-                        </>
-                      )}
-                    </div>
-
-                    {app.skills && (
-                      <p className="text-[11px] text-white/60 font-mono mt-1">
-                        Skills: <span className="text-white/80">{app.skills}</span>
+                      <p className="text-xs text-[#7484FE] font-mono">
+                        Applied for: <strong>{rRole}</strong> ({rDomain})
                       </p>
-                    )}
 
-                    {app.created_at && (
-                      <p className="text-[10px] text-white/40 font-mono">
-                        Submitted: {new Date(app.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
-                      </p>
-                    )}
-                  </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/70 font-sans">
+                        <span>College: <strong>{college}</strong></span>
+                        {branch && (
+                          <>
+                            <span>•</span>
+                            <span>Branch: <strong>{branch}</strong></span>
+                          </>
+                        )}
+                        {gradYear && (
+                          <>
+                            <span>•</span>
+                            <span>Grad Year: <strong>{gradYear}</strong></span>
+                          </>
+                        )}
+                        {sPhone && sPhone !== "N/A" && (
+                          <>
+                            <span>•</span>
+                            <span>Mobile: <strong>{sPhone}</strong></span>
+                          </>
+                        )}
+                        {app.availability && (
+                          <>
+                            <span>•</span>
+                            <span className="text-[#33FF67]">Availability: {app.availability}</span>
+                          </>
+                        )}
+                      </div>
 
-                  <div className="flex flex-col sm:items-end gap-3 shrink-0">
-                    {/* Status Dropdown Selector */}
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] uppercase text-white/50">Status:</span>
-                      <select
-                        aria-label="Update Application Status"
-                        value={app.status || "submitted"}
-                        disabled={updatingStatusId === app.id}
-                        onChange={(e) => handleStatusChange(app.id, e.target.value)}
-                        className={`rounded-lg border px-3 py-1 font-mono text-xs font-bold uppercase outline-none transition-colors cursor-pointer ${
-                          app.status === "selected"
-                            ? "border-[#33FF67] bg-[#33FF67]/15 text-[#33FF67]"
-                            : app.status === "shortlisted"
-                            ? "border-[#7484FE] bg-[#7484FE]/15 text-[#7484FE]"
-                            : app.status === "interview_scheduled"
-                            ? "border-amber-400 bg-amber-400/15 text-amber-300"
-                            : app.status === "under_review"
-                            ? "border-sky-400 bg-sky-400/15 text-sky-300"
-                            : app.status === "rejected"
-                            ? "border-red-500/50 bg-red-500/10 text-red-400"
-                            : "border-white/20 bg-[#121212] text-white/80"
-                        }`}
-                      >
-                        <option value="submitted" className="bg-[#181818] text-white">Submitted</option>
-                        <option value="under_review" className="bg-[#181818] text-sky-300">Under Review</option>
-                        <option value="shortlisted" className="bg-[#181818] text-[#7484FE]">Shortlisted</option>
-                        <option value="interview_scheduled" className="bg-[#181818] text-amber-300">Interview Scheduled</option>
-                        <option value="selected" className="bg-[#181818] text-[#33FF67]">Selected</option>
-                        <option value="rejected" className="bg-[#181818] text-red-400">Rejected</option>
-                      </select>
-                      {updatingStatusId === app.id && (
-                        <Loader2 size={13} className="animate-spin text-[#33FF67]" />
+                      {app.skills && (
+                        <p className="text-[11px] text-white/60 font-mono mt-1">
+                          Skills: <span className="text-white/80">{app.skills}</span>
+                        </p>
+                      )}
+
+                      {app.created_at && (
+                        <p className="text-[10px] text-white/40 font-mono">
+                          Submitted: {new Date(app.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                        </p>
                       )}
                     </div>
 
-                    {/* Action Links & Buttons */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      {app.video_url && (
-                        <a
-                          href={app.video_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1 hover:border-[#7484FE] hover:text-[#7484FE]"
+                    <div className="flex flex-col sm:items-end gap-3 shrink-0">
+                      {/* Status Dropdown Selector */}
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] uppercase text-white/50">Status:</span>
+                        <select
+                          aria-label="Update Application Status"
+                          value={app.status || "submitted"}
+                          disabled={updatingStatusId === app.id}
+                          onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                          className={`rounded-lg border px-3 py-1 font-mono text-xs font-bold uppercase outline-none transition-colors cursor-pointer ${
+                            app.status === "selected"
+                              ? "border-[#33FF67] bg-[#33FF67]/15 text-[#33FF67]"
+                              : app.status === "shortlisted"
+                              ? "border-[#7484FE] bg-[#7484FE]/15 text-[#7484FE]"
+                              : app.status === "interview_scheduled"
+                              ? "border-amber-400 bg-amber-400/15 text-amber-300"
+                              : app.status === "under_review"
+                              ? "border-sky-400 bg-sky-400/15 text-sky-300"
+                              : app.status === "rejected"
+                              ? "border-red-500/50 bg-red-500/10 text-red-400"
+                              : "border-white/20 bg-[#121212] text-white/80"
+                          }`}
                         >
-                          Video <ExternalLink size={12} />
-                        </a>
-                      )}
+                          <option value="submitted" className="bg-[#181818] text-white">Submitted</option>
+                          <option value="under_review" className="bg-[#181818] text-sky-300">Under Review</option>
+                          <option value="shortlisted" className="bg-[#181818] text-[#7484FE]">Shortlisted</option>
+                          <option value="interview_scheduled" className="bg-[#181818] text-amber-300">Interview Scheduled</option>
+                          <option value="selected" className="bg-[#181818] text-[#33FF67]">Selected</option>
+                          <option value="rejected" className="bg-[#181818] text-red-400">Rejected</option>
+                        </select>
+                        {updatingStatusId === app.id && (
+                          <Loader2 size={13} className="animate-spin text-[#33FF67]" />
+                        )}
+                      </div>
 
-                      {app.portfolio_url && (
-                        <a
-                          href={app.portfolio_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1"
-                        >
-                          Portfolio <ExternalLink size={12} />
-                        </a>
-                      )}
+                      {/* Action Links & Buttons */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {app.video_url && (
+                          <a
+                            href={app.video_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-line h-8 px-2.5 text-xs font-mono inline-flex items-center gap-1 hover:border-[#7484FE] hover:text-[#7484FE]"
+                            title="Open One-Minute Self-Introduction Video"
+                          >
+                            Video <ExternalLink size={11} />
+                          </a>
+                        )}
 
-                      {app.resume_url ? (
+                        {app.portfolio_url && (
+                          <a
+                            href={app.portfolio_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-line h-8 px-2.5 text-xs font-mono inline-flex items-center gap-1"
+                            title="Open Portfolio / GitHub Link"
+                          >
+                            Portfolio <ExternalLink size={11} />
+                          </a>
+                        )}
+
+                        {isResumeAvailable ? (
+                          <button
+                            type="button"
+                            disabled={downloadingResumeId === app.id}
+                            onClick={() => handleViewResume(app.id, app.resume_download_url || app.resume_url)}
+                            className="btn btn-line h-8 px-2.5 text-xs font-mono inline-flex items-center gap-1.5 hover:border-[#33FF67] hover:text-[#33FF67]"
+                            title="Open candidate resume securely"
+                          >
+                            {downloadingResumeId === app.id ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin text-[#33FF67]" />
+                                <span>Opening...</span>
+                              </>
+                            ) : (
+                              <>
+                                <FileText size={12} className="text-[#33FF67]" />
+                                <span>Download CV</span>
+                                <ExternalLink size={11} className="opacity-60" />
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 font-mono text-[10px] text-red-400">
+                            CV Missing
+                          </span>
+                        )}
+
                         <button
                           type="button"
-                          disabled={downloadingResumeId === app.id}
-                          onClick={() => handleViewResume(app.id, app.resume_url)}
-                          className="btn btn-line h-8 px-3 text-xs font-mono inline-flex items-center gap-1.5 hover:border-[#33FF67] hover:text-[#33FF67]"
+                          onClick={() => setSelectedAppModal(app)}
+                          className="btn border border-white/20 text-white/80 hover:text-white h-8 px-2.5 text-xs font-mono inline-flex items-center gap-1"
+                          title="View all submitted candidate answers"
                         >
-                          {downloadingResumeId === app.id ? (
-                            <>
-                              <Loader2 size={12} className="animate-spin text-[#33FF67]" />
-                              <span>Opening...</span>
-                            </>
-                          ) : (
-                            <>
-                              <FileText size={12} className="text-[#33FF67]" />
-                              <span>View Resume</span>
-                              <ExternalLink size={11} className="opacity-60" />
-                            </>
-                          )}
+                          <Eye size={12} />
+                          <span>All Answers</span>
                         </button>
-                      ) : (
-                        <span className="font-mono text-[11px] text-white/30">No Resume</span>
-                      )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1007,7 +1483,7 @@ function AdminConsole() {
         <button
           onClick={() => {
             logout();
-            window.location.href = "/login";
+            window.location.href = "/login?admin=1";
           }}
           className="text-[#7484FE] hover:underline"
         >
@@ -1016,6 +1492,182 @@ function AdminConsole() {
       </div>
 
       <DashboardShell role="Organiser" sections={sections} />
+
+      {/* --- Full Application Details & Answers Modal --- */}
+      {selectedAppModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+        >
+          <div className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border-2 border-white/20 bg-[#161616] p-6 text-[#F7F2F6] shadow-2xl md:p-8">
+            <button
+              onClick={() => setSelectedAppModal(null)}
+              className="absolute right-4 top-4 text-[#F7F2F6]/60 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="mb-5 border-b border-white/10 pb-3">
+              <span className="font-mono text-xs font-bold text-[#33FF67] uppercase tracking-wider">
+                Full Application Dossier
+              </span>
+              <h2 className="headline mt-1 text-2xl text-[#F7F2F6]">
+                {selectedAppModal.student?.full_name || selectedAppModal.student_name || "Applicant"}
+              </h2>
+              <div className="mt-1 font-mono text-xs text-[#7484FE]">
+                {selectedAppModal.internship?.role || selectedAppModal.role_title || "Internship"} • {selectedAppModal.internship?.domain || "General"}
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs font-sans">
+              {/* Candidate Info Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-white/10 bg-[#121212] p-4 font-mono">
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Confirmation (CNF)</span>
+                  <span className="text-[#33FF67] font-bold text-sm">
+                    {selectedAppModal.student?.team_code || selectedAppModal.cnf_number || "CNF"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Application Status</span>
+                  <span className="text-white uppercase font-bold">
+                    {selectedAppModal.status || "submitted"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Email</span>
+                  <span className="text-white">
+                    {selectedAppModal.student?.email || selectedAppModal.student_email || "N/A"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Phone / Contact</span>
+                  <span className="text-white">
+                    {selectedAppModal.student?.mobile || selectedAppModal.student_phone || "N/A"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Institution</span>
+                  <span className="text-white font-sans">
+                    {selectedAppModal.student?.college || selectedAppModal.college || "MLRIT"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Course & Branch</span>
+                  <span className="text-white font-sans">
+                    {selectedAppModal.student?.course_branch || selectedAppModal.course_branch || "N/A"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Availability</span>
+                  <span className="text-[#33FF67]">
+                    {selectedAppModal.availability || "Immediate"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Submission Date</span>
+                  <span className="text-white/70">
+                    {selectedAppModal.created_at
+                      ? new Date(selectedAppModal.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                      : "N/A"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div className="rounded-xl border border-white/10 bg-[#121212] p-4">
+                <span className="text-white/40 block text-[10px] uppercase font-mono mb-1">Relevant Skills</span>
+                <p className="text-white font-mono text-xs">
+                  {selectedAppModal.skills || "Not specified"}
+                </p>
+              </div>
+
+              {/* Links */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {selectedAppModal.video_url && (
+                  <div className="rounded-xl border border-white/10 bg-[#121212] p-4">
+                    <span className="text-white/40 block text-[10px] uppercase font-mono mb-1">
+                      Self-Introduction Video Link
+                    </span>
+                    <a
+                      href={selectedAppModal.video_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#7484FE] hover:underline inline-flex items-center gap-1 font-mono text-xs break-all"
+                    >
+                      {selectedAppModal.video_url} <ExternalLink size={12} className="shrink-0" />
+                    </a>
+                  </div>
+                )}
+
+                {selectedAppModal.portfolio_url && (
+                  <div className="rounded-xl border border-white/10 bg-[#121212] p-4">
+                    <span className="text-white/40 block text-[10px] uppercase font-mono mb-1">
+                      Portfolio / Profile URL
+                    </span>
+                    <a
+                      href={selectedAppModal.portfolio_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#7484FE] hover:underline inline-flex items-center gap-1 font-mono text-xs break-all"
+                    >
+                      {selectedAppModal.portfolio_url} <ExternalLink size={12} className="shrink-0" />
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Resume Path & Action */}
+              <div className="rounded-xl border border-white/10 bg-[#121212] p-4 flex items-center justify-between gap-4 font-mono">
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase">Resume Storage Path</span>
+                  <span className="text-white/80 text-xs break-all">
+                    {selectedAppModal.resume_url || "No resume path provided"}
+                  </span>
+                </div>
+                {selectedAppModal.resume_url && (
+                  <button
+                    type="button"
+                    onClick={() => handleViewResume(selectedAppModal.id, selectedAppModal.resume_url)}
+                    className="btn btn-signal h-8 px-3 text-xs shrink-0 inline-flex items-center gap-1.5"
+                  >
+                    <Download size={13} />
+                    <span>Download CV</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Extra Submitted Answers (from JSON answers column) */}
+              {selectedAppModal.answers && typeof selectedAppModal.answers === "object" && Object.keys(selectedAppModal.answers).length > 0 && (
+                <div className="rounded-xl border border-white/10 bg-[#121212] p-4 space-y-2">
+                  <span className="text-white/40 block text-[10px] uppercase font-mono mb-2">
+                    Submitted Application Answers
+                  </span>
+                  <div className="space-y-2 font-mono text-xs">
+                    {Object.entries(selectedAppModal.answers).map(([k, v]) => (
+                      <div key={k} className="border-b border-white/5 pb-2">
+                        <span className="text-[#7484FE] block text-[11px] font-semibold">{k}:</span>
+                        <span className="text-white/80 font-sans">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end border-t border-white/10 pt-4">
+              <button
+                type="button"
+                onClick={() => setSelectedAppModal(null)}
+                className="btn btn-line px-5 text-xs font-mono"
+              >
+                Close Dossier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- Role Create / Edit Modal --- */}
       {roleModalOpen && (
@@ -1264,7 +1916,6 @@ function AdminConsole() {
               </h2>
             </div>
 
-            {/* Explanatory callout */}
             <div className="mb-4 rounded-xl border border-[#33FF67]/30 bg-[#33FF67]/5 p-3.5 text-xs text-white/80 leading-relaxed font-sans">
               <div className="flex items-center gap-2 font-mono font-bold text-[#33FF67]">
                 <Sparkles size={14} /> Immediate Access Enabled
@@ -1306,7 +1957,7 @@ function AdminConsole() {
                   type="text"
                   value={cnfForm.cnfNumber}
                   onChange={(e) => setCnfForm({ ...cnfForm, cnfNumber: e.target.value.toUpperCase() })}
-                  placeholder="e.g. CNF-82E13C"
+                  placeholder="e.g. CNF-A1B2C3"
                   className="field uppercase font-mono tracking-wider font-semibold"
                   required
                 />

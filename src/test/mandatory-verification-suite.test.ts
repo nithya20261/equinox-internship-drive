@@ -95,8 +95,8 @@ describe("Mandatory 10-Point End-to-End Authentication Verification Suite", () =
     expect(userData.user).toBeDefined();
     expect(userData.user?.email?.toLowerCase()).toBe(testEmail.toLowerCase());
     expect(userData.user?.email_confirmed_at).toBeTruthy();
-    expect(userData.user?.user_metadata?.role).toBe("student");
-    expect(userData.user?.user_metadata?.team_code).toBe(testCnf);
+    expect(userData.user?.user_metadata?.["role"]).toBe("student");
+    expect(userData.user?.user_metadata?.["team_code"]).toBe(testCnf);
   });
 
   // TEST 3: Verify user ID matches across auth.users, profiles, and students

@@ -203,8 +203,8 @@ function Register() {
         </div>
 
         <div>
-          <FieldLabel htmlFor="r-cnf-number" hint="e.g. CNF-7EEEB1 (From your registration confirmation)">
-            Confirmation Number (CNF) *
+          <FieldLabel htmlFor="r-cnf-number" hint="e.g. CNF-A1B2C3 or College Roll No (e.g. 24R21A0500)">
+            Confirmation (CNF) / Roll Number *
           </FieldLabel>
           <input
             id="r-cnf-number"
@@ -212,12 +212,12 @@ function Register() {
             type="text"
             value={studentForm.cnfNumber}
             onChange={handleStudentChange}
-            placeholder="e.g. CNF-7EEEB1"
+            placeholder="e.g. CNF-A1B2C3 or 24R21A0500"
             className="field uppercase font-mono tracking-wider"
             required
           />
           <p className="mt-1 text-[11px] font-mono text-emerald-400/90">
-            * Must match your official Equinox Premium Pass registration.
+            * Must match your official Equinox Premium Pass CNF or authorized Council Roll Number.
           </p>
         </div>
 

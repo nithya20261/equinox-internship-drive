@@ -1,23 +1,44 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { pageMeta } from "@/lib/seo";
 import { AuthLayout, RoleTabs } from "@/components/site/AuthLayout";
 import { FieldLabel } from "@/components/site/primitives";
 import { Loader2 } from "lucide-react";
 import { loginStudent, loginAdmin } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
   head: () => pageMeta("Login", "Log in to your Equinox E-Summit 2K26 Internship Drive account."),
   // Admin tab is hidden from the public page; admins open /login?admin=1
-  validateSearch: (search: Record<string, unknown>): { admin?: boolean } =>
-    search["admin"] === undefined ? {} : { admin: String(search["admin"]) === "1" || search["admin"] === true },
+  validateSearch: (search: Record<string, unknown>): { admin?: boolean } => {
+    const raw = search["admin"];
+    if (raw === undefined || raw === null) return {};
+    const str = String(raw).toLowerCase().trim();
+    return { admin: str === "1" || str === "true" || raw === true };
+  },
   component: Login,
 });
 
 function Login() {
   const router = useRouter();
-  const { admin: showAdmin } = Route.useSearch();
+  const search = Route.useSearch();
+  const showAdmin = Boolean(search.admin);
+  const { user, isAdmin } = useAuth();
   const [role, setRole] = useState<"student" | "admin">(showAdmin ? "admin" : "student");
+
+  // Keep role in sync with admin search param
+  useEffect(() => {
+    if (showAdmin) {
+      setRole("admin");
+    }
+  }, [showAdmin]);
+
+  // If already authenticated as admin, navigate straight to /dashboard/admin
+  useEffect(() => {
+    if (isAdmin && user?.role === "admin") {
+      router.navigate({ to: "/dashboard/admin" });
+    }
+  }, [isAdmin, user, router]);
   
   // Student login fields: Confirmation Number (CNF) & Password (same as CNF)
   const [cnfNumber, setCnfNumber] = useState("");
@@ -95,7 +116,7 @@ function Login() {
         {role === "student" ? (
           <>
             <div>
-              <FieldLabel htmlFor="l-cnf-number" hint="CNF number, email, or team code">Confirmation Number / Email</FieldLabel>
+              <FieldLabel htmlFor="l-cnf-number" hint="CNF number, Roll No, email, or team code">Confirmation Number / Roll No / Email</FieldLabel>
               <input
                 id="l-cnf-number"
                 type="text"
@@ -106,7 +127,7 @@ function Login() {
                   if (errorMessage) setErrorMessage(null);
                 }}
                 className="field font-mono font-medium"
-                placeholder="CNF-XXXXXX or your registered email"
+                placeholder="CNF-XXXXXX, Roll No (e.g. 24R21A0500), or registered email"
                 required
               />
             </div>
