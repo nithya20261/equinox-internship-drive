@@ -5,6 +5,7 @@ import { AuthLayout } from "@/components/site/AuthLayout";
 import { FieldLabel } from "@/components/site/primitives";
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { registerStudentWithResume } from "@/lib/api";
+import { validateEmailAddress } from "@/lib/email-validator";
 
 export const Route = createFileRoute("/register")({
   head: () =>
@@ -27,6 +28,8 @@ interface StudentFormState {
 function Register() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [studentForm, setStudentForm] = useState<StudentFormState>({
@@ -42,11 +45,20 @@ function Register() {
     const { name, value } = e.target;
     setStudentForm((prev) => ({ ...prev, [name]: value }));
     if (errorMessage) setErrorMessage(null);
+    if (name === "email" && emailSuggestion) setEmailSuggestion(null);
+  };
+
+  const applyEmailSuggestion = (suggestion: string) => {
+    setStudentForm((prev) => ({ ...prev, email: suggestion }));
+    setEmailSuggestion(null);
+    setErrorMessage(null);
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || isCooldown) return;
     setErrorMessage(null);
+    setEmailSuggestion(null);
 
     if (
       !studentForm.fullName.trim() ||
@@ -59,10 +71,17 @@ function Register() {
       setErrorMessage("Please fill in all required fields, including your Confirmation (CNF) Number.");
       return;
     }
-    if (!studentForm.email.includes("@")) {
-      setErrorMessage("Please enter a valid email address.");
+
+    // Comprehensive RFC 5322 email syntax, typo detection, and domain guard
+    const emailValidation = validateEmailAddress(studentForm.email);
+    if (!emailValidation.isValid) {
+      if (emailValidation.suggestion) {
+        setEmailSuggestion(emailValidation.suggestion);
+      }
+      setErrorMessage(emailValidation.error || "Please enter a valid email address.");
       return;
     }
+
     if (studentForm.password.length < 6) {
       setErrorMessage("Password must be at least 6 characters.");
       return;
@@ -70,12 +89,13 @@ function Register() {
 
     try {
       setIsSubmitting(true);
+      setIsCooldown(true);
       await registerStudentWithResume({
         full_name: studentForm.fullName,
         cnf_number: studentForm.cnfNumber.trim().toUpperCase(),
         college: studentForm.college,
         mobile: studentForm.mobile,
-        email: studentForm.email,
+        email: emailValidation.sanitizedEmail,
         password: studentForm.password,
       });
 
@@ -93,6 +113,8 @@ function Register() {
       setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
+      // Cooldown timer to prevent rapid duplicate clicks
+      setTimeout(() => setIsCooldown(false), 2500);
     }
   };
 
@@ -260,10 +282,25 @@ function Register() {
             value={studentForm.email}
             onChange={handleStudentChange}
             autoComplete="email"
-            placeholder="name@college.edu"
+            placeholder="name@college.edu or name@gmail.com"
             className="field"
             required
           />
+          {emailSuggestion && (
+            <div className="mt-2 flex items-center justify-between gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs font-mono text-amber-300">
+              <span className="flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                Did you mean <strong className="text-white underline">{emailSuggestion}</strong>?
+              </span>
+              <button
+                type="button"
+                onClick={() => applyEmailSuggestion(emailSuggestion)}
+                className="btn btn-signal h-6 px-2.5 text-[10px] font-bold shrink-0"
+              >
+                Use this
+              </button>
+            </div>
+          )}
         </div>
 
         <div>
@@ -283,13 +320,18 @@ function Register() {
 
         <button
           type="submit"
-          disabled={isSubmitting}
-          className="btn btn-signal w-full"
+          disabled={isSubmitting || isCooldown}
+          className="btn btn-signal w-full disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Verifying Pass &amp; Creating Account...
+            </span>
+          ) : isCooldown ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Please wait...
             </span>
           ) : (
             "Complete Registration"

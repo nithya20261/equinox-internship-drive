@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { verifyPassEligibility, isCnfEligible } from "@/lib/pass-eligibility";
+import { validateEmailAddress } from "./email-validator";
 import { INTERNSHIP_COMPANIES } from "@/data/site";
 
 const PREMIUM_ONLY_MESSAGE =
@@ -594,8 +595,11 @@ export const studentSubmitApplicationServerFn = createServerFn({ method: "POST" 
     }
 
     const cleanEmail = (email || "").trim().toLowerCase();
-    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      throw new Error("Please provide a valid email address.");
+    if (cleanEmail) {
+      const emailValidation = validateEmailAddress(cleanEmail);
+      if (!emailValidation.isValid) {
+        throw new Error(emailValidation.error || "Please provide a valid email address.");
+      }
     }
 
     if (videoUrl) {
@@ -880,12 +884,26 @@ export interface RegisterStudentPayload {
  */
 function formatAuthErrorMessage(msg?: string): string {
   if (!msg) return "Registration failed. Please try again.";
+  const lower = msg.toLowerCase();
   if (
-    msg.toLowerCase().includes("unregistered api key") ||
-    msg.toLowerCase().includes("invalid api key") ||
-    msg.toLowerCase().includes("jwt")
+    lower.includes("unregistered api key") ||
+    lower.includes("invalid api key") ||
+    lower.includes("jwt")
   ) {
     return "Supabase Authentication Error: The SUPABASE_SERVICE_ROLE_KEY configured in .env is unregistered or was rotated on Supabase project plyvtevuxdmzswtvpmwv. Please paste your current active service_role key from the Supabase Dashboard (Project Settings > API) into .env.";
+  }
+  if (
+    lower.includes("over_email_send_rate_limit") ||
+    lower.includes("email rate limit") ||
+    lower.includes("too many emails")
+  ) {
+    return "Email delivery limit reached. Please wait a few minutes before trying again.";
+  }
+  if (
+    lower.includes("email_address_invalid") ||
+    lower.includes("invalid email")
+  ) {
+    return "The provided email address is invalid or cannot receive mail. Please verify the spelling and domain.";
   }
   return msg;
 }
@@ -907,6 +925,22 @@ export async function registerStudentCore(data: RegisterStudentPayload) {
         session: null,
       };
     }
+
+    // 0. Strict RFC 5322 validation, typo detection, and disposable domain protection
+    const emailValidation = validateEmailAddress(cleanEmail);
+    if (!emailValidation.isValid) {
+      return {
+        success: false,
+        error: emailValidation.error || "Please enter a valid email address.",
+        user: null,
+        session: null,
+      };
+    }
+
+    // 0.1 Durable rate limiting: Prevent duplicate signup submissions and repeated email triggers
+    // Limits registration attempts to max 3 per CNF + Email per 10 minutes
+    const regRateLimitKey = `reg:${cleanCnf}:${cleanEmail}`;
+    await verifyDurableRateLimit(regRateLimitKey, 3, 10);
 
     if (data.password.length < 6) {
       return {
@@ -996,59 +1030,46 @@ export async function registerStudentCore(data: RegisterStudentPayload) {
         await supabaseAdmin.auth.admin.deleteUser(placeholderUser.id);
       }
     } else if (placeholderUser) {
-      // Upgrade synthetic placeholder account to the student's real email, password, and confirmed status
-      const { data: upgraded, error: upgradeErr } = await supabaseAdmin.auth.admin.updateUserById(
-        placeholderUser.id,
-        {
-          email: cleanEmail,
-          password: data.password,
-          email_confirm: true,
-          user_metadata: {
-            role: "student",
-            full_name: cleanName,
-            college: cleanCollege,
-            team_code: officialTeamCode,
-            cnf_number: cleanCnf,
-            pass_category: "Premium Pass",
-            mobile: cleanMobile,
-            skills: data.skills || [],
-            graduation_year: data.graduationYear || null,
-          },
-        }
-      );
+      // Safe upgrade: Create a fresh confirmed user account for the student's genuine email.
+      // This avoids calling updateUserById({ email }) on the synthetic placeholder email,
+      // which would trigger Supabase to send an "email change" notice to the non-existent
+      // placeholder address (@equinox.mlrit.ac.in) and cause a transactional email hard bounce.
+      const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: data.password,
+        email_confirm: true,
+        user_metadata: {
+          role: "student",
+          full_name: cleanName,
+          college: cleanCollege,
+          team_code: officialTeamCode,
+          cnf_number: cleanCnf,
+          pass_category: "Premium Pass",
+          mobile: cleanMobile,
+          skills: data.skills || [],
+          graduation_year: data.graduationYear || null,
+        },
+      });
 
-      if (upgradeErr || !upgraded?.user) {
-        // Fallback: create fresh user
-        const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email: cleanEmail,
-          password: data.password,
-          email_confirm: true,
-          user_metadata: {
-            role: "student",
-            full_name: cleanName,
-            college: cleanCollege,
-            team_code: officialTeamCode,
-            cnf_number: cleanCnf,
-            pass_category: "Premium Pass",
-            mobile: cleanMobile,
-            skills: data.skills || [],
-            graduation_year: data.graduationYear || null,
-          },
-        });
+      if (createError || !createdUser?.user) {
+        return {
+          success: false,
+          error: formatAuthErrorMessage(createError?.message || "Registration failed. Please try again."),
+          user: null,
+          session: null,
+        };
+      }
 
-        if (createError || !createdUser?.user) {
-          return {
-            success: false,
-            error: formatAuthErrorMessage(createError?.message || "Registration failed. Please try again."),
-            user: null,
-            session: null,
-          };
-        }
-        userId = createdUser.user.id;
-        authUser = createdUser.user;
-      } else {
-        userId = upgraded.user.id;
-        authUser = upgraded.user;
+      userId = createdUser.user.id;
+      authUser = createdUser.user;
+
+      // Safely delete the synthetic placeholder account to prevent stale records
+      try {
+        await supabaseAdmin.from("students").delete().eq("user_id", placeholderUser.id);
+        await supabaseAdmin.from("profiles").delete().eq("id", placeholderUser.id);
+        await supabaseAdmin.auth.admin.deleteUser(placeholderUser.id);
+      } catch (cleanupErr) {
+        console.warn("Non-critical placeholder cleanup note:", cleanupErr);
       }
     } else {
       // 1. Create fresh user with email_confirm: true (direct registration without email verification)
@@ -2029,4 +2050,111 @@ export const studentGetApplicationsServerFn = createServerFn({ method: "POST" })
     return {
       applications: hydrated,
     };
+  });
+
+export interface PasswordResetPayload {
+  email: string;
+  redirectTo?: string | undefined;
+}
+
+export interface ResendVerificationPayload {
+  email: string;
+}
+
+export async function requestPasswordResetCore(data: PasswordResetPayload) {
+  const rawEmail = (data.email || "").trim();
+  const validation = validateEmailAddress(rawEmail);
+  if (!validation.isValid) {
+    throw new Error(validation.error || "Please enter a valid email address.");
+  }
+
+  const cleanEmail = validation.sanitizedEmail;
+  const rateLimitKey = `pwd_reset:${cleanEmail}`;
+
+  await verifyDurableRateLimit(rateLimitKey, 3, 60);
+
+  const anonClient = getServerAnonClient();
+  const resetOptions = data.redirectTo ? { redirectTo: data.redirectTo } : undefined;
+
+  const { error } = await anonClient.auth.resetPasswordForEmail(cleanEmail, resetOptions);
+
+  if (error) {
+    if (error.message.toLowerCase().includes("rate limit") || error.message.toLowerCase().includes("too many")) {
+      throw new Error("Password reset email limit reached. Please wait a few minutes before trying again.");
+    }
+    console.warn("resetPasswordForEmail note:", error.message);
+  }
+
+  return {
+    success: true,
+    message: "If an account exists with this email, instructions have been dispatched.",
+  };
+}
+
+/**
+ * Server function: Secure, rate-limited password reset request.
+ * - Validates email syntax and blocks disposable/synthetic domains before calling Supabase.
+ * - Enforces durable rate limiting (max 3 attempts per 60 minutes).
+ * - Avoids unhandled retries and catches Supabase mailer errors gracefully.
+ */
+export const requestPasswordResetServerFn = createServerFn({ method: "POST" })
+  .validator((data: PasswordResetPayload) => data)
+  .handler(async ({ data }) => {
+    return await requestPasswordResetCore(data);
+  });
+
+export async function resendVerificationEmailCore(data: ResendVerificationPayload) {
+  const rawEmail = (data.email || "").trim();
+  const validation = validateEmailAddress(rawEmail);
+  if (!validation.isValid) {
+    throw new Error(validation.error || "Please enter a valid email address.");
+  }
+
+  const cleanEmail = validation.sanitizedEmail;
+  const rateLimitKey = `resend_verify:${cleanEmail}`;
+
+  await verifyDurableRateLimit(rateLimitKey, 3, 60);
+
+  const serverClient = getServerSupabase();
+  const { data: usersData } = await serverClient.auth.admin.listUsers({ perPage: 1000 });
+  const user = usersData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
+
+  if (user && user.email_confirmed_at) {
+    return {
+      success: true,
+      alreadyConfirmed: true,
+      message: "Your email address is already verified. You can log in directly.",
+    };
+  }
+
+  const anonClient = getServerAnonClient();
+  const { error } = await anonClient.auth.resend({
+    type: "signup",
+    email: cleanEmail,
+  });
+
+  if (error) {
+    if (error.message.toLowerCase().includes("rate limit") || error.message.toLowerCase().includes("too many")) {
+      throw new Error("Verification email limit reached. Please wait a few minutes before requesting another.");
+    }
+    console.warn("resendVerificationEmail note:", error.message);
+  }
+
+  return {
+    success: true,
+    alreadyConfirmed: false,
+    message: "A verification email has been dispatched. Please check your inbox and spam folder.",
+  };
+}
+
+/**
+ * Server function: Secure, rate-limited email verification resend.
+ * - Validates email syntax before dispatch.
+ * - Checks if account is already confirmed to prevent redundant emails.
+ * - Enforces durable rate limiting.
+ */
+export const resendVerificationEmailServerFn = createServerFn({ method: "POST" })
+  .validator((data: ResendVerificationPayload) => data)
+  .handler(async ({ data }) => {
+    return await resendVerificationEmailCore(data);
   });

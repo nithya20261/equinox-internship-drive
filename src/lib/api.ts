@@ -16,8 +16,11 @@ import {
   adminExportApplicationsCsvServerFn,
   adminExportStudentsCsvServerFn,
   studentGetApplicationsServerFn,
+  requestPasswordResetServerFn,
+  resendVerificationEmailServerFn,
   type ApplicationStatus,
 } from "./server-auth";
+import { validateEmailAddress } from "./email-validator";
 
 const RESUME_BUCKET = "resumes";
 
@@ -177,6 +180,10 @@ export async function uploadResumeFile(
  */
 export async function registerStudentWithResume(input: StudentRegistrationInput) {
   const cleanEmail = input.email.trim().toLowerCase();
+  const emailValidation = validateEmailAddress(cleanEmail);
+  if (!emailValidation.isValid) {
+    throw new Error(emailValidation.error || "Please enter a valid email address.");
+  }
   const cleanCnf = (input.cnf_number || "").trim().toUpperCase();
   const cleanName = input.full_name.trim();
   const cleanCollege = input.college.trim();
@@ -852,6 +859,8 @@ export async function submitStudentApplication(
   if (!form.fullName.trim()) throw new Error("Full Name is required.");
   if (!form.contactNumber.trim()) throw new Error("Contact Number is required.");
   if (!form.email.trim()) throw new Error("Email Address is required.");
+  const appEmailVal = validateEmailAddress(form.email);
+  if (!appEmailVal.isValid) throw new Error(appEmailVal.error || "Valid email address is required.");
   if (!form.instituteAndBranch.trim()) throw new Error("Institute Name and Current Course / Branch is required.");
   if (!form.preferredRole.trim()) throw new Error("Please select your Preferred Internship Role.");
   if (!form.resumeFile) throw new Error("Resume / CV file upload is required.");
@@ -1112,4 +1121,26 @@ export async function getResumeDownloadUrl(resumePath: string): Promise<string |
     console.warn("Failed to create signed URL:", err);
     return null;
   }
+}
+
+/**
+ * Request password reset with RFC validation and rate-limit guard.
+ */
+export async function requestPasswordReset(email: string, redirectTo?: string) {
+  const val = validateEmailAddress(email);
+  if (!val.isValid) throw new Error(val.error || "Please enter a valid email address.");
+  return await requestPasswordResetServerFn({
+    data: { email: val.sanitizedEmail, redirectTo },
+  });
+}
+
+/**
+ * Resend signup verification email with RFC validation and cooldown guard.
+ */
+export async function resendVerificationEmail(email: string) {
+  const val = validateEmailAddress(email);
+  if (!val.isValid) throw new Error(val.error || "Please enter a valid email address.");
+  return await resendVerificationEmailServerFn({
+    data: { email: val.sanitizedEmail },
+  });
 }

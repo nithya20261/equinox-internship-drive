@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Loader2, CheckCircle2, AlertCircle, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { isCnfEligible } from "@/lib/pass-eligibility";
+import { validateEmailAddress } from "@/lib/email-validator";
 import {
   submitStudentApplication,
   getOpportunities,
@@ -137,8 +138,11 @@ export function StudentApplicationForm({
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
       errors.email = "Email address is required.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      errors.email = "Please enter a valid email address.";
+    } else {
+      const emailValidation = validateEmailAddress(trimmedEmail);
+      if (!emailValidation.isValid) {
+        errors.email = emailValidation.error || "Please enter a valid email address.";
+      }
     }
 
     // 4. Institute and Branch

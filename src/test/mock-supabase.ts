@@ -533,6 +533,14 @@ export function createMockSupabaseClient(_url?: string, _key?: string, options?:
         return { error: null };
       },
 
+      resetPasswordForEmail: async (_email: string, _options?: any) => {
+        return { data: {}, error: null };
+      },
+
+      resend: async (_options: { type: string; email: string }) => {
+        return { data: {}, error: null };
+      },
+
       getUser: async (token?: string) => {
         if (token && token.startsWith("mock-token-")) {
           const id = token.replace("mock-token-", "");
